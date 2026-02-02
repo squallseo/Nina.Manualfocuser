@@ -10,49 +10,14 @@
 
     <!--  The datatemplae for the dockable is indicated by the fully qualified class name and the postfix _Dockable  -->
     <DataTemplate x:Key="Cwseo.NINA.Focuser.FocuserDockables.FocuserDockable_Dockable">
-        <Grid Margin="5">
-            <Grid Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource VisibilityConverter}}">
-                <TextBlock Grid.Column="0"
-                     Text="Target"
-                     Width="100"
-                     Opacity="0.7"
-                     VerticalAlignment="Top"
-                     HorizontalAlignment="Left"
-                     Margin="0,0,5,0"/>
-
-                <TextBox Grid.Column="1"
-                     Height="20"
-                     Width="90"
-                     VerticalAlignment="Top"
-                     Margin="0,0,5,0"
-                     Text="{Binding TargetPos, UpdateSourceTrigger=PropertyChanged}"/>
-            </Grid>
-            <Grid Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource InverseBooleanToVisibilityCollapsedConverter}}">
-                <TextBlock
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Text="Focuser not connected" />
-            </Grid>
-        </Grid>
+        <local:FocuserDockableView/>
     </DataTemplate>
 
     <!--  This geometrygroup defines a custom SVG to be used with the plugin dockable  -->
     <!-- Icon geometry -->
     <GeometryGroup x:Key="Cwseo.NINA.Manualfocuser_SVG">
-        <!-- 브라켓 프레임(면) -->
-        <PathGeometry Figures="M 2,2 L 6,2 L 6,3 L 2,3 Z" />
-        <PathGeometry Figures="M 2,2 L 3,2 L 3,6 L 2,6 Z" />
-
-        <PathGeometry Figures="M 10,2 L 14,2 L 14,3 L 10,3 Z" />
-        <PathGeometry Figures="M 13,2 L 14,2 L 14,6 L 13,6 Z" />
-
-        <PathGeometry Figures="M 2,10 L 3,10 L 3,14 L 2,14 Z" />
-        <PathGeometry Figures="M 2,13 L 6,13 L 6,14 L 2,14 Z" />
-
-        <PathGeometry Figures="M 13,10 L 14,10 L 14,14 L 13,14 Z" />
-        <PathGeometry Figures="M 10,13 L 14,13 L 14,14 L 10,14 Z" />
-
-        <!-- 가운데 별 -->
-        <PathGeometry Figures="M 8,5.0 L 9.0,7.0 L 11.2,7.0 L 9.4,8.3 L 10.1,10.4 L 8,9.2 L 5.9,10.4 L 6.6,8.3 L 4.8,7.0 L 7.0,7.0 Z" />
+        <PathGeometry Figures="M 1.01725e-005,-0.134583L 1.01725e-005,116.235L 8.08268,116.235L 8.08268,7.94806L 116.369,7.94806L 116.369,-0.134583M 427.765,-0.134583L 427.765,7.94806L 536.057,7.94806L 536.057,116.235L 544.135,116.235L 544.135,-0.134583M 1.01725e-005,427.631L 1.01725e-005,544L 116.369,544L 116.369,535.923L 8.08268,535.923L 8.08268,427.631M 536.057,427.631L 536.057,535.923L 427.765,535.923L 427.765,544L 544.135,544L 544.135,427.631" />
+        <PathGeometry Figures="M 180,337 L 180,198 L 205,198 L 240,250 L 275,198 L 300,198 L 300,337 L 280,337 L 280,235 L 240,275 L 200,235 L 200,337 Z" />
+        <PathGeometry Figures="M 308.357,197.795L 388.795,197.795L 388.795,213.732L 327.295,213.732L 327.295,254.982L 382.795,254.982L 382.795,270.92L 327.295,270.92L 327.295,337.774L 308.357,337.774L 308.357,197.795 Z " />
     </GeometryGroup>
 </ResourceDictionary>

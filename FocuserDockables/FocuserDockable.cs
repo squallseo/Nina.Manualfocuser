@@ -1,90 +1,74 @@
-﻿using NINA.Astrometry;
-using NINA.Astrometry.Interfaces;
-using NINA.Equipment.Equipment.MyTelescope;
+﻿using Accord.Statistics.Moving;
+using NINA.Core.Utility;
+using NINA.Equipment.Equipment;
 using NINA.Equipment.Equipment.MyFocuser;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.ViewModel;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel.Composition;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using CommunityToolkit.Mvvm.Input;
-using RelayCommand = CommunityToolkit.Mvvm.Input.RelayCommand;
+using System.Windows.Input;
 
 namespace Cwseo.NINA.Focuser.FocuserDockables {
     [Export(typeof(IDockableVM))]
-    public class FocuserDockable : DockableVM, IFocuserConsumer{
-        private IFocuserMediator focuserMediator;
-        private IImagingMediator imaging;
-        private ICameraMediator Camera;
-        private CancellationTokenSource FocusControlToken;
-        private int _userstep = 5;
-        private int _targetpos = 100;
-        private bool _moving = false;
+    public class FocuserDockable : DockableVM, IFocuserConsumer {
+        private readonly IFocuserMediator focuserMediator;
+        private CancellationTokenSource moveCts = new CancellationTokenSource();
 
-        public int TargetPos {
-            get => _targetpos;
-            set {
-                _targetpos = value;
-                RaisePropertyChanged(nameof(TargetPos));
-            }
+        private int targetPosition = 100;
+        private int userStep = 5;
+
+        private bool isBusy;
+        private bool _moving;
+        public FocuserInfo FocuserInfo { get; private set; } 
+
+        public int TargetPosition {
+            get => targetPosition;
+            set { targetPosition = value; RaisePropertyChanged(nameof(TargetPosition)); }
         }
 
         public int UserStep {
-            get => _userstep;
-            set {
-                _userstep = value;
-                RaisePropertyChanged(nameof(UserStep));
+            get => userStep;
+            set { userStep = value; RaisePropertyChanged(nameof(UserStep)); }
+        }
+
+        public bool IsBusy {
+            get => isBusy;
+            private set {
+                isBusy = value;
+                RaisePropertyChanged(nameof(IsBusy));
+                RaisePropertyChanged(nameof(IsNotBusy));
+
+                // ✅ RaiseCanExecuteChanged() 대신 이걸로 갱신
+                CommandManager.InvalidateRequerySuggested();
             }
         }
-        public bool Moving {
+
+        public bool IsMoving {
             get => _moving;
             set {
                 _moving = value;
-                RaisePropertyChanged(nameof(Moving));
+                RaisePropertyChanged(nameof(IsMoving));
             }
         }
 
-        public RelayCommand StopFocusControl { get; set; }
-        public RelayCommand MoveToPosition { get; set; }
-        public RelayCommand MoveIN { get; set; }
-        public RelayCommand MoveOUT { get; set; }
+        public bool IsNotBusy => !IsBusy;
 
-        // tool icon position setting
-        override public bool IsTool { get; } = true;
+        // ✅ NINA Core.Utility 커맨드만 사용 (모호성 제거)
+        public ICommand HaltFocuserCommand { get; private set; }
+        public ICommand MoveToPositionCommand { get; private set; }
+        public ICommand MoveINCommand { get; private set; }
+        public ICommand MoveOUTCommand { get; private set; }
 
-        public void Dispose() {
-            // On shutdown cleanup
-            focuserMediator.RemoveConsumer(this);
-        }
-        public FocuserInfo FocuserInfo { get; private set; }
-        public TelescopeInfo TelescopeInfo { get; private set; }
-        public DeepSkyObject Target { get; private set; }
-
-        public void UpdateDeviceInfo(FocuserInfo deviceInfo) {
-            // The IsVisible flag indicates if the dock window is active or hidden
-            if (IsVisible) {
-                FocuserInfo = deviceInfo;
-                RaisePropertyChanged(nameof(FocuserInfo));
-            }
-        }
-
-        public void UpdateEndAutoFocusRun(AutoFocusInfo info) {
-            throw new NotImplementedException();
-        }
-
-        public void UpdateUserFocused(FocuserInfo info) {
-            throw new NotImplementedException();
-        }
+        public override bool IsTool { get; } = true;
 
         [ImportingConstructor]
-        public FocuserDockable(IProfileService profileService, ICameraMediator Camera, IImagingMediator imaging, IFocuserMediator focuser) : base(profileService) {
+        public FocuserDockable(IProfileService profileService, IFocuserMediator focuser)
+            : base(profileService) {
 
             // This will reference the resource dictionary to import the SVG graphic and assign it as the icon for the header bar
             var dict = new ResourceDictionary();
@@ -92,51 +76,99 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             ImageGeometry = (System.Windows.Media.GeometryGroup)dict["Cwseo.NINA.Manualfocuser_SVG"];
             ImageGeometry.Freeze();
 
-            this.focuserMediator = focuser;
-            this.imaging = imaging;
-            this.Camera = Camera;
-            Target = null;
-            focuserMediator.RegisterConsumer(this);   // ← 이게 없으면 UpdateDeviceInfo가 절대 안 불립니다.
-            // Dock header
             Title = "Manual Focuser";
 
-            // Some asynchronous initialization
-            Task.Run(() => {
-                //NighttimeData = nighttimeCalculator.Calculate();
-                //nighttimeCalculator.OnReferenceDayChanged += NighttimeCalculator_OnReferenceDayChanged;
+            focuserMediator = focuser;
+            focuserMediator.RegisterConsumer(this);
+
+            // Cancel
+            // Cancel
+            HaltFocuserCommand = new global::NINA.Core.Utility.RelayCommand(_ =>
+            {
+                try { moveCts?.Cancel(); } catch { }
             });
 
-            // Registering to profile service events to react on
-            profileService.LocationChanged += (object sender, EventArgs e) => {
-                Target?.SetDateAndPosition(NighttimeCalculator.GetReferenceDate(DateTime.Now), profileService.ActiveProfile.AstrometrySettings.Latitude, profileService.ActiveProfile.AstrometrySettings.Longitude);
-            };
 
-            profileService.HorizonChanged += (object sender, EventArgs e) => {
-                Target?.SetCustomHorizon(profileService.ActiveProfile.AstrometrySettings.Horizon);
-            };
+            // ✅ AsyncCommand는 named arg 없이 "원본 방식"으로
+            MoveToPositionCommand = new AsyncCommand<int>(
+                () => ExecuteMoveToAsync(),
+                o => CanMove()
+            );
 
-            StopFocusControl = new RelayCommand(() => {
-                FocusControlToken?.Cancel();
-            });
+            MoveINCommand = new AsyncCommand<int>(
+                () => ExecuteMoveInAsync(),
+                o => CanMove()
+            );
 
-            MoveToPosition = new RelayCommand(async () => {
-                Moving = true;
-                await focuser.MoveFocuser(TargetPos, FocusControlToken.Token);
-                Moving = false;
-            });
+            MoveOUTCommand = new AsyncCommand<int>(
+                () => ExecuteMoveOutAsync(),
+                o => CanMove()
+            );
+        }
 
-            MoveIN = new RelayCommand(async () => {
-                Moving = true;
-                await focuser.MoveFocuserRelative(-Math.Abs(UserStep), FocusControlToken.Token);
-                Moving = false;
-            });
+        public void Dispose() {
+            try { moveCts?.Cancel(); } catch { }
+            try { moveCts?.Dispose(); } catch { }
+            try { focuserMediator?.RemoveConsumer(this); } catch { }
+        }
 
-            MoveOUT = new RelayCommand(async () => {
-                Moving = true;
-                await focuser.MoveFocuserRelative(+-Math.Abs(UserStep), FocusControlToken.Token);
-                Moving = false;
-            });
+        public void UpdateDeviceInfo(FocuserInfo deviceInfo) {
+            if (deviceInfo == null) return;
 
+                FocuserInfo = deviceInfo;
+                RaisePropertyChanged(nameof(FocuserInfo));
+        }
+
+        // ---- IFocuserConsumer 나머지 메서드(필요없으면 비워도 됨) ----
+        public void UpdateEndAutoFocusRun(AutoFocusInfo info) { }
+        public void UpdateUserFocused(FocuserInfo info) { }
+        public void NewAutoFocusPoint(OxyPlot.DataPoint dataPoint) { }
+        public void AutoFocusRunStarting() { }
+
+        private bool CanMove() {
+            return FocuserInfo.Connected && !IsBusy;
+        }
+
+        private void ResetCts() {
+            try { moveCts?.Cancel(); } catch { }
+            try { moveCts?.Dispose(); } catch { }
+            moveCts = new CancellationTokenSource();
+        }
+
+        private async Task<int> ExecuteMoveToAsync() {
+            ResetCts();
+            IsBusy = true;
+            IsMoving = true;
+            try {
+                return await focuserMediator.MoveFocuser(TargetPosition, moveCts.Token);
+            } finally {
+                IsBusy = false;
+                IsMoving = false;
+            }
+        }
+
+        private async Task<int> ExecuteMoveInAsync() {
+            ResetCts();
+            IsBusy = true;
+            IsMoving = true;
+            try {
+                return await focuserMediator.MoveFocuserRelative(-Math.Abs(UserStep), moveCts.Token);
+            } finally {
+                IsBusy = false;
+                IsMoving = false;
+            }
+        }
+
+        private async Task<int> ExecuteMoveOutAsync() {
+            ResetCts();
+            IsBusy = true;
+            IsMoving = true;
+            try {
+                return await focuserMediator.MoveFocuserRelative(+Math.Abs(UserStep), moveCts.Token);
+            } finally {
+                IsBusy = false;
+                IsMoving = false;
+            }
         }
     }
 }
