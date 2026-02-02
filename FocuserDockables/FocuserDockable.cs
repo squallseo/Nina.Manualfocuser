@@ -19,20 +19,30 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
         private readonly IFocuserMediator focuserMediator;
         private CancellationTokenSource moveCts = new CancellationTokenSource();
 
-        private int targetPosition = 100;
-        private int userStep = 5;
-
         private bool _moving;
-        public FocuserInfo FocuserInfo { get; private set; } 
+        public FocuserInfo FocuserInfo { get; private set; }
 
         public int TargetPosition {
-            get => targetPosition;
-            set { targetPosition = value; RaisePropertyChanged(nameof(TargetPosition)); }
+            get {
+                // 저장된 값 가져오기
+                return Properties.Settings.Default.TargetPosition;
+            }
+            set {
+                Properties.Settings.Default.TargetPosition = value; // Settings에 저장
+                Properties.Settings.Default.Save(); // 저장 반영
+                RaisePropertyChanged(nameof(TargetPosition));
+            }
         }
 
         public int UserStep {
-            get => userStep;
-            set { userStep = value; RaisePropertyChanged(nameof(UserStep)); }
+            get {
+                return Properties.Settings.Default.UserStep;
+            }
+            set {
+                Properties.Settings.Default.UserStep = value; // Settings에 저장
+                Properties.Settings.Default.Save(); // 저장 반영
+                RaisePropertyChanged(nameof(UserStep));
+            }
         }
 
         public bool IsMoving {
@@ -42,8 +52,6 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
                 RaisePropertyChanged(nameof(IsMoving));
             }
         }
-
-        public bool IsNotBusy => !IsMoving;
 
         // ✅ NINA Core.Utility 커맨드만 사용 (모호성 제거)
         public ICommand HaltFocuserCommand { get; private set; }
@@ -65,6 +73,8 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
 
             Title = "Manual Focuser";
 
+            TargetPosition = Properties.Settings.Default.TargetPosition;
+            UserStep = Properties.Settings.Default.UserStep;
             focuserMediator = focuser;
             focuserMediator.RegisterConsumer(this);
 
@@ -101,8 +111,36 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
         public void UpdateDeviceInfo(FocuserInfo deviceInfo) {
             if (deviceInfo == null) return;
 
+            void Apply() {
                 FocuserInfo = deviceInfo;
                 RaisePropertyChanged(nameof(FocuserInfo));
+
+                // Connected 변경으로 CanExecute 재평가가 필요함 (클릭 전에도 즉시 반영)
+                CommandManager.InvalidateRequerySuggested();
+            }
+
+            if (Application.Current?.Dispatcher?.CheckAccess() == true) {
+                Apply();
+            } else {
+                Application.Current?.Dispatcher?.BeginInvoke((Action)Apply);
+            }
+        }
+        public void InitializeSettings() {
+            // 설정값이 0 또는 비어있는 경우
+            if (Properties.Settings.Default.TargetPosition == 0) {
+                // 디바이스에서 값 가져오기
+                var devicePosition = FocuserInfo.Position;  // 디바이스에서 위치 가져오는 메서드
+                Properties.Settings.Default.TargetPosition = devicePosition; // 디바이스에서 받은 값으로 설정
+            }
+
+            if (Properties.Settings.Default.UserStep == 0) {
+                // 디바이스에서 UserStep 값 가져오기 (예시)
+                var deviceStep = FocuserInfo.StepSize;  // 디바이스에서 step값 가져오는 메서드
+                Properties.Settings.Default.UserStep = (int)deviceStep; 
+            }
+
+            // 변경된 값을 저장
+            Properties.Settings.Default.Save();
         }
 
         // ---- IFocuserConsumer 나머지 메서드(필요없으면 비워도 됨) ----
@@ -112,7 +150,7 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
         public void AutoFocusRunStarting() { }
 
         private bool CanMove() {
-            return FocuserInfo.Connected && IsNotBusy;
+            return FocuserInfo.Connected && !IsMoving;
         }
 
         private void ResetCts() {
@@ -125,7 +163,7 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             ResetCts();
             IsMoving = true;
             try {
-                return await focuserMediator.MoveFocuser(TargetPosition, moveCts.Token);
+                return await focuserMediator.MoveFocuser(Properties.Settings.Default.TargetPosition, moveCts.Token);
             } finally {
                 IsMoving = false;
             }
@@ -135,7 +173,7 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             ResetCts();
             IsMoving = true;
             try {
-                return await focuserMediator.MoveFocuserRelative(-Math.Abs(UserStep), moveCts.Token);
+                return await focuserMediator.MoveFocuserRelative(-Math.Abs(Properties.Settings.Default.UserStep), moveCts.Token);
             } finally {
                 IsMoving = false;
             }
@@ -145,7 +183,7 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             ResetCts();
             IsMoving = true;
             try {
-                return await focuserMediator.MoveFocuserRelative(+Math.Abs(UserStep), moveCts.Token);
+                return await focuserMediator.MoveFocuserRelative(+Math.Abs(Properties.Settings.Default.UserStep), moveCts.Token);
             } finally {
                 IsMoving = false;
             }

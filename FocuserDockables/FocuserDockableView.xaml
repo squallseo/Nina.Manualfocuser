@@ -15,7 +15,7 @@
         </GeometryGroup>
     </UserControl.Resources>
 
-    <Grid Margin="8">
+    <Grid Margin="5">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
 
@@ -58,9 +58,7 @@
                         </UniformGrid>
                     </Border>
 
-                    <Border Margin="0,5,0,0"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0">
+                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblIsSettling}" />
                             <CheckBox Width="20"
@@ -71,68 +69,76 @@
                           IsChecked="{Binding FocuserInfo.IsSettling, FallbackValue=False, Mode=OneWay}"
                           IsEnabled="False"
                           Style="{StaticResource InvertedCheckmarkCheckbox}" />
+                        </UniformGrid> 
+                    </Border>
+
+                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                        <UniformGrid VerticalAlignment="Center" Columns="2">
+                            <TextBlock Text="{ns:Loc LblPosition}" />
+                            <TextBlock Margin="5,0,0,0" Text="{Binding FocuserInfo.Position}" FontWeight="Bold" TextWrapping="WrapWithOverflow"/>
                         </UniformGrid>
                     </Border>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Position:" Width="90"/>
-                        <TextBlock Text="{Binding FocuserInfo.Position}"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                        <TextBlock Text="Temperature:" Width="90"/>
-                        <TextBlock Text="{Binding FocuserInfo.Temperature, StringFormat={}{0:0.00} °C}"/>
-                    </StackPanel>
+                    <Border Margin="0,5,0,5" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                        <UniformGrid VerticalAlignment="Center" Columns="2">
+                            <TextBlock Text="{ns:Loc LblTemperature}" />
+                            <TextBlock Margin="5,0,0,0" Text="{Binding FocuserInfo.Temperature, StringFormat={}{0:0.00} °C}"/>
+                        </UniformGrid>
+                    </Border>
 
                     <!-- Target + GO -->
-                    <Grid Margin="0,0,0,10">
+                    <Grid Margin="0,0,0,5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Target" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Grid.Column="1"
-                                 Height="26"
+                                 Height="20"
                                  VerticalContentAlignment="Center"
                                  Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding IsNotBusy}"/>
 
                         <!-- ✅ 실행 중 Cancel로 바뀌려면 Command는 NINA AsyncCommand여야 함 -->
                         <ninactrl:CancellableButton Grid.Column="2"
-                                                    Height="26"
-                                                    MinWidth="70"
-                                                    Margin="8,0,0,0"
+                                                    Height="20"
+                                                    MinWidth="50"
+                                                    Margin="5,0,0,0"
+                                                    FontSize="8"
                                                     ButtonText="GO"
                                                     HorizontalContentAlignment="Center"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"
                                                     CancelToolTip="Cancel"
-                                                    Command="{Binding MoveToPositionCommand}"/>
+                                                    Command="{Binding MoveToPositionCommand}">
+                        </ninactrl:CancellableButton>
                     </Grid>
 
                     <!-- Step + In/Out -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/> 
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Step" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Grid.Column="1"
-                                 Height="26"
+                                 Height="20"
                                  VerticalContentAlignment="Center"
                                  Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"
                                  IsEnabled="{Binding IsNotBusy}"/>
 
                         <ninactrl:CancellableButton Grid.Column="2"
-                                                    Height="26"
-                                                    MinWidth="70"
-                                                    Margin="8,0,0,0"
+                                                    Height="20"
+                                                    MinWidth="50"
+                                                    Margin="5,0,0,0"
                                                     HorizontalContentAlignment="Center"
+                                                    VerticalContentAlignment="Center" 
+                                                    FontSize="10"
                                                     ButtonText="In(-)"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"
@@ -140,10 +146,12 @@
                                                     Command="{Binding MoveINCommand}"/>
 
                         <ninactrl:CancellableButton Grid.Column="3"
-                                                    Height="26"
-                                                    MinWidth="70"
-                                                    Margin="8,0,0,0"
+                                                    Height="20"
+                                                    MinWidth="50"
+                                                    Margin="5,0,0,0"
                                                     HorizontalContentAlignment ="Center"
+                                                    VerticalContentAlignment="Center" 
+                                                    FontSize="10"
                                                     ButtonText="Out(+)"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"

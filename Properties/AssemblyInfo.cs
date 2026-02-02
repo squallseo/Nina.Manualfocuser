@@ -11,7 +11,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("1.0.0.1")]
 
 // [MANDATORY] The name of your plugin
-[assembly: AssemblyTitle("Focuser")]
+[assembly: AssemblyTitle("Manual Focuser")]
 // [MANDATORY] A short description of your plugin
 [assembly: AssemblyDescription("direct step input manual focuser")]
 
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 // Your name
 [assembly: AssemblyCompany("cwseo")]
 // The product name that this plugin is part of
-[assembly: AssemblyProduct("focuser")]
+[assembly: AssemblyProduct("manual focuser")]
 [assembly: AssemblyCopyright("Copyright © 2026 cwseo")]
 
 // The minimum Version of N.I.N.A. that this plugin is compatible with
@@ -31,25 +31,25 @@ using System.Runtime.InteropServices;
 // The url to the license
 [assembly: AssemblyMetadata("LicenseURL", "https://www.mozilla.org/en-US/MPL/2.0/")]
 // The repository where your pluggin is hosted
-[assembly: AssemblyMetadata("Repository", "https://mypluginsourcerepo.com/project")]
+[assembly: AssemblyMetadata("Repository", "https://github.com/squallseo/Nina.Manualfocuser")]
 
 // The following attributes are optional for the official manifest meta data
 
 //[Optional] Your plugin homepage URL - omit if not applicaple
-[assembly: AssemblyMetadata("Homepage", "https://mypluginwebsite.com/")]
+[assembly: AssemblyMetadata("Homepage", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/README.md")]
 
 //[Optional] Common tags that quickly describe your plugin
-[assembly: AssemblyMetadata("Tags", "")]
+[assembly: AssemblyMetadata("Tags", "focuser, manual, step, direct input")]
 
 //[Optional] A link that will show a log of all changes in between your plugin's versions
-[assembly: AssemblyMetadata("ChangelogURL", "https://mypluginsourcerepo.com/project/CHANGELOG.md")]
+[assembly: AssemblyMetadata("ChangelogURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/CHANGELOG.md")]
 
 //[Optional] The url to a featured logo that will be displayed in the plugin list next to the name
-[assembly: AssemblyMetadata("FeaturedImageURL", "https://github.com/squallseo/Nina.ManualFocuser/blob/master/Images/logo.png?raw=true")]
+[assembly: AssemblyMetadata("FeaturedImageURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/logo.png?raw=true")]
 //[Optional] A url to an example screenshot of your plugin in action
-[assembly: AssemblyMetadata("ScreenshotURL", "")]
+[assembly: AssemblyMetadata("ScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/idle.png?raw=true")]
 //[Optional] An additional url to an example example screenshot of your plugin in action
-[assembly: AssemblyMetadata("AltScreenshotURL", "")]
+[assembly: AssemblyMetadata("AltScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/moving.png?raw=true")]
 //[Optional] An in-depth description of your plugin
 [assembly: AssemblyMetadata("LongDescription", @"In N.I.N.A., the default focuser controls in the Imaging tab use the relative step size defined in the Autofocus settings. This means that when you want to change the focuser movement amount, you have to leave the Imaging tab and go into the Autofocus configuration.
 
