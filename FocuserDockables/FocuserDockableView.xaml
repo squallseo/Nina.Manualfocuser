@@ -5,14 +5,25 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:ninactrl="clr-namespace:NINA.CustomControlLibrary;assembly=NINA.CustomControlLibrary"
              xmlns:ns="clr-namespace:NINA.Core.Locale;assembly=NINA.Core"
+             xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base"
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="300">
 
     <UserControl.Resources>
         <!-- ✅ CancelSVG: 스코프 문제 회피용 (가장 단순) -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/Brushes.xaml" />
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/SVGDictionary.xaml" />
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/Converters.xaml" />
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/ProfileService.xaml" />
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/Styles/CheckBox.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
         <GeometryGroup x:Key="CancelSVG">
             <PathGeometry Figures="M 33.188,1.656L 31.6773,0.145332L 16.5933,15.2293L 1.51067,0.145332L 0,1.656L 15.084,16.74L 0,31.8227L 1.51067,33.3333L 16.5933,18.2453L 31.6773,33.3333L 33.188,31.8227L 18.0987,16.74" />
         </GeometryGroup>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid Margin="5">
@@ -20,10 +31,7 @@
             <StackPanel>
 
                 <!-- 연결 안됨 -->
-                <Border Margin="0,5,0,0"
-                    VerticalAlignment="Top"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="0"
+                <Border Margin="0,5,0,0" VerticalAlignment="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0"
                     Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource InverseBooleanToVisibilityCollapsedConverter}}">
                     <UniformGrid VerticalAlignment="Center" Columns="2">
                         <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblConnected}" />
@@ -42,9 +50,7 @@
                 <StackPanel Orientation="Vertical"
                 Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
 
-                    <Border Margin="0,5,0,0"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0">
+                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblIsMoving}" />
                             <CheckBox Width="20"
@@ -99,7 +105,7 @@
                                  Height="20"
                                  VerticalContentAlignment="Center"
                                  Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{Binding IsNotBusy}"/>
+                                 IsEnabled="True"/>
 
                         <!-- ✅ 실행 중 Cancel로 바뀌려면 Command는 NINA AsyncCommand여야 함 -->
                         <ninactrl:CancellableButton Grid.Column="2"
@@ -130,7 +136,7 @@
                                  Height="20"
                                  VerticalContentAlignment="Center"
                                  Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{Binding IsNotBusy}"/>
+                                 IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
 
                         <ninactrl:CancellableButton Grid.Column="2"
                                                     Height="20"

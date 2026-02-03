@@ -72,9 +72,9 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             ImageGeometry.Freeze();
 
             Title = "Manual Focuser";
-
             TargetPosition = Properties.Settings.Default.TargetPosition;
             UserStep = Properties.Settings.Default.UserStep;
+            InitializeSettings();
             focuserMediator = focuser;
             focuserMediator.RegisterConsumer(this);
 
@@ -114,7 +114,6 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             void Apply() {
                 FocuserInfo = deviceInfo;
                 RaisePropertyChanged(nameof(FocuserInfo));
-
                 // Connected 변경으로 CanExecute 재평가가 필요함 (클릭 전에도 즉시 반영)
                 CommandManager.InvalidateRequerySuggested();
             }
@@ -126,21 +125,31 @@ namespace Cwseo.NINA.Focuser.FocuserDockables {
             }
         }
         public void InitializeSettings() {
-            // 설정값이 0 또는 비어있는 경우
-            if (Properties.Settings.Default.TargetPosition == 0) {
-                // 디바이스에서 값 가져오기
-                var devicePosition = FocuserInfo.Position;  // 디바이스에서 위치 가져오는 메서드
-                Properties.Settings.Default.TargetPosition = devicePosition; // 디바이스에서 받은 값으로 설정
-            }
+            if (FocuserInfo == null) {
+                if (Properties.Settings.Default.TargetPosition == 0) {
+                    TargetPosition = 1000;
+                }
+                if (Properties.Settings.Default.UserStep == 0) {
+                    UserStep = 10;
+                }
+            } else {
+                // 설정값이 0 또는 비어있는 경우
+                if (Properties.Settings.Default.TargetPosition == 0) {
+                    // 디바이스에서 값 가져오기
+                    var devicePosition = FocuserInfo.Position;  // 디바이스에서 위치 가져오는 메서드
+                    Properties.Settings.Default.TargetPosition = devicePosition; // 디바이스에서 받은 값으로 설정
+                    RaisePropertyChanged(nameof(TargetPosition));
+                }
 
-            if (Properties.Settings.Default.UserStep == 0) {
-                // 디바이스에서 UserStep 값 가져오기 (예시)
-                var deviceStep = FocuserInfo.StepSize;  // 디바이스에서 step값 가져오는 메서드
-                Properties.Settings.Default.UserStep = (int)deviceStep; 
+                if (Properties.Settings.Default.UserStep == 0) {
+                    // 디바이스에서 UserStep 값 가져오기 (예시)
+                    var deviceStep = FocuserInfo.StepSize;  // 디바이스에서 step값 가져오는 메서드
+                    Properties.Settings.Default.UserStep = (int)deviceStep;
+                    RaisePropertyChanged(nameof(UserStep));
+                }
+                // 변경된 값을 저장
+                Properties.Settings.Default.Save();
             }
-
-            // 변경된 값을 저장
-            Properties.Settings.Default.Save();
         }
 
         // ---- IFocuserConsumer 나머지 메서드(필요없으면 비워도 됨) ----
