@@ -7,10 +7,9 @@
              xmlns:ns="clr-namespace:NINA.Core.Locale;assembly=NINA.Core"
              xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="300">
+             d:DesignHeight="232" d:DesignWidth="300">
 
     <UserControl.Resources>
-        <!-- ✅ CancelSVG: 스코프 문제 회피용 (가장 단순) -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/Brushes.xaml" />
@@ -19,10 +18,6 @@
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/ProfileService.xaml" />
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/Styles/CheckBox.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-
-        <GeometryGroup x:Key="CancelSVG">
-            <PathGeometry Figures="M 33.188,1.656L 31.6773,0.145332L 16.5933,15.2293L 1.51067,0.145332L 0,1.656L 15.084,16.74L 0,31.8227L 1.51067,33.3333L 16.5933,18.2453L 31.6773,33.3333L 33.188,31.8227L 18.0987,16.74" />
-        </GeometryGroup>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -31,7 +26,7 @@
             <StackPanel>
 
                 <!-- 연결 안됨 -->
-                <Border Margin="0,5,0,0" VerticalAlignment="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0"
+                <Border Margin="0,5,0,0" VerticalAlignment="Top"
                     Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource InverseBooleanToVisibilityCollapsedConverter}}">
                     <UniformGrid VerticalAlignment="Center" Columns="2">
                         <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblConnected}" />
@@ -50,7 +45,7 @@
                 <StackPanel Orientation="Vertical"
                 Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
 
-                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                    <Border Margin="0,5,0,0">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblIsMoving}" />
                             <CheckBox Width="20"
@@ -64,7 +59,7 @@
                         </UniformGrid>
                     </Border>
 
-                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                    <Border Margin="0,5,0,0">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblIsSettling}" />
                             <CheckBox Width="20"
@@ -78,17 +73,17 @@
                         </UniformGrid> 
                     </Border>
 
-                    <Border Margin="0,5,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                    <Border Margin="0,5,0,0">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock Text="{ns:Loc LblPosition}" />
                             <TextBlock Margin="5,0,0,0" Text="{Binding FocuserInfo.Position}" FontWeight="Bold" TextWrapping="WrapWithOverflow"/>
                         </UniformGrid>
                     </Border>
 
-                    <Border Margin="0,5,0,5" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0">
+                    <Border Margin="0,5,0,5">
                         <UniformGrid VerticalAlignment="Center" Columns="2">
                             <TextBlock Text="{ns:Loc LblTemperature}" />
-                            <TextBlock Margin="5,0,0,0" Text="{Binding FocuserInfo.Temperature, StringFormat={}{0:0.00} °C}"/>
+                            <TextBlock Margin="5,0,0,0" Text="{Binding FocuserInfo.Temperature, Converter={StaticResource UnitConverter}, ConverterParameter=' °C|2'}" TextWrapping="WrapWithOverflow"/>
                         </UniformGrid>
                     </Border>
 
@@ -114,6 +109,7 @@
                                                     Margin="5,0,0,0"
                                                     FontSize="8"
                                                     ButtonText="GO"
+                                                    ToolTip="{ns:Loc LblMoveFocuserTooltip}"
                                                     HorizontalContentAlignment="Center"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"
@@ -145,6 +141,7 @@
                                                     HorizontalContentAlignment="Center"
                                                     VerticalContentAlignment="Center" 
                                                     FontSize="10"
+                                                    ToolTip="Move in"
                                                     ButtonText="In(-)"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"
@@ -158,6 +155,7 @@
                                                     HorizontalContentAlignment ="Center"
                                                     VerticalContentAlignment="Center" 
                                                     FontSize="10"
+                                                    ToolTip="Move out"
                                                     ButtonText="Out(+)"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
                                                     CancelCommand="{Binding HaltFocuserCommand}"
