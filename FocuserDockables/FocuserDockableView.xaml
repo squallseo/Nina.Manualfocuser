@@ -95,7 +95,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Target" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="{ns:Loc LblTargetPosition}" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Grid.Column="1"
                                  Height="20"
                                  VerticalContentAlignment="Center"
@@ -108,7 +108,7 @@
                                                     MinWidth="50"
                                                     Margin="5,0,0,0"
                                                     FontSize="8"
-                                                    ButtonText="GO"
+                                                    ButtonText="{ns:Loc LblMove}"
                                                     ToolTip="{ns:Loc LblMoveFocuserTooltip}"
                                                     HorizontalContentAlignment="Center"
                                                     CancelButtonImage="{StaticResource CancelSVG}"
@@ -127,7 +127,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Step" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Step Increment" MinWidth ="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Grid.Column="1"
                                  Height="20"
                                  VerticalContentAlignment="Center"
