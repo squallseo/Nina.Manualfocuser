@@ -12,7 +12,7 @@ using System.Runtime.InteropServices;
 // [MANDATORY] The name of your plugin
 [assembly: AssemblyTitle("Manual Focuser")]
 // [MANDATORY] A short description of your plugin
-[assembly: AssemblyDescription("direct step input manual focuser")]
+[assembly: AssemblyDescription("Direct step input manual focuser")]
 
 // The following attributes are not required for the plugin per se, but are required by the official manifest meta data
 
@@ -50,19 +50,18 @@ using System.Runtime.InteropServices;
 //[Optional] An additional url to an example example screenshot of your plugin in action
 [assembly: AssemblyMetadata("AltScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/moving.png?raw=true")]
 //[Optional] An in-depth description of your plugin
-[assembly: AssemblyMetadata("LongDescription", @"In N.I.N.A., the default focuser controls in the Imaging tab use the relative step size defined in the Autofocus settings. This means that when you want to change the focuser movement amount, you have to leave the Imaging tab and go into the Autofocus configuration.
+[assembly: AssemblyMetadata("LongDescription", @"In N.I.N.A., the default focuser controls in the Imaging tab use the relative step size defined in the Autofocus settings. 
+
+This means that when you want to change the focuser movement amount, you have to leave the Imaging tab and go into the Autofocus configuration.
 
 When fine-tuning focus manually — especially when making small, incremental adjustments while checking star shapes — this workflow is inconvenient and slows down the process.
 
 This plugin was created to solve that problem.
 
 Manual Focuser Input allows you to:
-
-Enter relative movement values directly in the Imaging tab
-
-Move the focuser immediately using those values
-
-Fine-adjust focus while visually inspecting stars, without switching tabs or changing Autofocus settings
+ - Enter step increment values directly in the Imaging tab
+ - Move the focuser immediately using those values
+ - Fine-adjust focus while visually inspecting stars, without switching tabs or changing Autofocus settings
 
 The goal is to make manual focus adjustment faster, simpler, and more intuitive during imaging sessions.")]
 
