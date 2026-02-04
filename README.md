@@ -9,12 +9,9 @@ When fine-tuning focus manually — especially when making small, incremental ad
 This plugin was created to solve that problem.
 
 Manual Focuser Input allows you to:
-
-Enter relative movement values directly in the Imaging tab
-
-Move the focuser immediately using those values
-
-Fine-adjust focus while visually inspecting stars, without switching tabs or changing Autofocus settings
+ - Enter relative movement values directly in the Imaging tab
+ - Move the focuser immediately using those values
+ - Fine-adjust focus while visually inspecting stars, without switching tabs or changing Autofocus settings
 
 The goal is to make manual focus adjustment faster, simpler, and more intuitive during imaging sessions.
 
