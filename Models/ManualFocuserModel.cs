@@ -14,6 +14,7 @@ using NINA.WPF.Base.Mediator;
 using NINA.WPF.Base.ViewModel.AutoFocus;
 using OxyPlot;
 using OxyPlot.Series;
+using OxyPlot.Wpf;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -129,7 +130,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             IExposureData image;
             var retries = 0;
             do {
-                Logger.Trace("Starting Exposure for autofocus");
+                Logger.Trace("Starting Exposure for manual focus");
                 double expTime = profileService.ActiveProfile.FocuserSettings.AutoFocusExposureTime;
                 if (filter != null && filter.AutoFocusExposureTime > -1) {
                     expTime = filter.AutoFocusExposureTime;
@@ -254,6 +255,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
+                double averageThicknessPx = SpikeAnalyzer.TryCalculateAverageSpikeThickness(imageData, analysisResult);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
