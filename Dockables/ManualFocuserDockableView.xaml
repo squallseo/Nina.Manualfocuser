@@ -85,7 +85,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="3">
                         <!-- MIN HFR -->
-                        <TextBlock Text="MIN (Focus, HFR) = ("/>
+                        <TextBlock Text="MIN (Position, HFR) = ("/>
                         <TextBlock Margin="0,0,0,0" Text="{Binding MinStep}"/>
                         <TextBlock Text="," />
                         <TextBlock Margin="5,0,0,0" Text="{Binding MinHFR, StringFormat=F3}"/>
@@ -98,88 +98,95 @@
                     </StackPanel>
                 </Grid>
                 <!-- GO/IN/OUT -->
-                <Grid Height="25"
+                <Grid Height="25" Margin="0,5,5,0"
                             Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="auto"/>
                         <ColumnDefinition/>
                     </Grid.ColumnDefinitions>
                     <!-- Target + GO -->
-                    <Border Margin="0,0,0,0"  Grid.Column="0">
-                        <Grid Margin="0,0,0,0" VerticalAlignment="Center">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                    <Grid Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="0" Height="25">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
-                            <TextBox Grid.Column="1"
-                                VerticalContentAlignment="Center"
-                                Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"
-                                IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
+                        <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
+                        <TextBox Grid.Column="1"
+                            VerticalContentAlignment="Center"
+                            Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"
+                            IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
 
-                            <!-- ✅ 실행 중 Cancel로 바뀌려면 Command는 NINA AsyncCommand여야 함 -->
-                            <ninactrl:CancellableButton Grid.Column="2"
-                                MinWidth="50"
-                                Margin="5,0,0,0"
-                                ButtonText="{ns:Loc LblMove}"
-                                ToolTip="{ns:Loc LblMoveFocuserTooltip}"
-                                HorizontalContentAlignment="Center"
-                                CancelButtonImage="{StaticResource CancelSVG}"
-                                CancelCommand="{Binding HaltFocuserCommand}"
-                                CancelToolTip="{ns:Loc LblCancel}"
-                                Command="{Binding MoveToPositionCommand}">
-                            </ninactrl:CancellableButton>
-                        </Grid>
-                    </Border>
+                        <!-- ✅ 실행 중 Cancel로 바뀌려면 Command는 NINA AsyncCommand여야 함 -->
+                        <ninactrl:CancellableButton Grid.Column="2"
+                            MinWidth="50"
+                            Margin="5,0,0,0"
+                            ButtonText="{ns:Loc LblMove}"
+                            ToolTip="{ns:Loc LblMoveFocuserTooltip}"
+                            HorizontalContentAlignment="Center"
+                            CancelButtonImage="{StaticResource CancelSVG}"
+                            CancelCommand="{Binding HaltFocuserCommand}"
+                            CancelToolTip="{ns:Loc LblCancel}"
+                            Command="{Binding MoveToPositionCommand}">
+                        </ninactrl:CancellableButton>
+                    </Grid>
 
                     <!-- Step + In/Out -->
-                    <Border Margin="15,0,0,0"  Grid.Column="1">
-                        <Grid VerticalAlignment="Center">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition />
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                    <Grid VerticalAlignment="Center" Margin="15,0,0,0" Grid.Column="1" Height="25">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition />
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
-                            <TextBox Grid.Column="1"
-                                 VerticalContentAlignment="Center"
-                                 Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
+                        <TextBlock Text="Step Inc." VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
+                        <TextBox Grid.Column="1"
+                                VerticalContentAlignment="Center"
+                                Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"
+                                IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
 
-                            <ninactrl:CancellableButton Grid.Column="2"
-                                MinWidth="50"
-                                Margin="5,0,0,0"
-                                HorizontalContentAlignment="Center"
-                                VerticalContentAlignment="Center" 
-                                ToolTip="Move in"
-                                ButtonText="In(-)"
-                                CancelButtonImage="{StaticResource CancelSVG}"
-                                CancelCommand="{Binding HaltFocuserCommand}"
-                                CancelToolTip="{ns:Loc LblCancel}"
-                                Command="{Binding MoveINCommand}"/>
+                        <ninactrl:CancellableButton Grid.Column="2"
+                            MinWidth="50"
+                            Margin="5,0,0,0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center" 
+                            ToolTip="Move in"
+                            ButtonText="In(-)"
+                            CancelButtonImage="{StaticResource CancelSVG}"
+                            CancelCommand="{Binding HaltFocuserCommand}"
+                            CancelToolTip="{ns:Loc LblCancel}"
+                            Command="{Binding MoveINCommand}"/>
 
-                            <ninactrl:CancellableButton Grid.Column="3"
-                                MinWidth="50"
-                                Margin="5,0,0,0"
-                                HorizontalContentAlignment ="Center"
-                                VerticalContentAlignment="Center" 
-                                ToolTip="Move out"
-                                ButtonText="Out(+)"
-                                CancelButtonImage="{StaticResource CancelSVG}"
-                                CancelCommand="{Binding HaltFocuserCommand}"
-                                CancelToolTip="{ns:Loc LblCancel}"
-                                Command="{Binding MoveOUTCommand}"/>
-                        </Grid>
-                    </Border>
-                    <Grid HorizontalAlignment="Right" Grid.Column="2">
-                        <ninactrl:CancellableButton Margin="0,0,0,0"
+                        <ninactrl:CancellableButton Grid.Column="3"
+                            MinWidth="50"
+                            Margin="5,0,0,0"
+                            HorizontalContentAlignment ="Center"
+                            VerticalContentAlignment="Center" 
+                            ToolTip="Move out"
+                            ButtonText="Out(+)"
+                            CancelButtonImage="{StaticResource CancelSVG}"
+                            CancelCommand="{Binding HaltFocuserCommand}"
+                            CancelToolTip="{ns:Loc LblCancel}"
+                            Command="{Binding MoveOUTCommand}"/>
+                    </Grid>
+                    <Grid HorizontalAlignment="Left" Margin="15,0,0,0" Grid.Column="2" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                        <ninactrl:CancellableButton
+                            Command="{Binding InputResetCommand}"
+                            ButtonText="Input Reset"
+                            MinWidth="90"
+                            ToolTip="Target = MIN Position, Step Inc. = Focuser Setting Step"
+                            HorizontalContentAlignment="Center">
+                        </ninactrl:CancellableButton>
+                    </Grid>
+                <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                        <ninactrl:CancellableButton
                             Command="{Binding ClearChartCommand}"
-                            ButtonText="Clear"
+                            MinWidth="70"
+                            ButtonText="Clear All"
                             ToolTip="Clear all points"
                             HorizontalContentAlignment="Center">
                         </ninactrl:CancellableButton>
@@ -223,7 +230,7 @@
                     TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
                     <oxy:LinearAxis
-                        Title="Focuser Step"
+                        Title="Focuser Position"
                         TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     EndPosition="1"

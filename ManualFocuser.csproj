@@ -4,7 +4,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>Cwseo.NINA.ManualFocuser</RootNamespace>
     <AssemblyName>Cwseo.NINA.ManualFocuser</AssemblyName>
-	  <TargetFolderName>ManualFocuser Focuser</TargetFolderName>
+	  <TargetFolderName>Manual Focuser</TargetFolderName>
 	  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
 	  <NoWarn>$(NoWarn);NU1701</NoWarn>

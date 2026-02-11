@@ -151,6 +151,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
         // ✅ NINA Core.Utility 커맨드만 사용 (모호성 제거)
         public ICommand ClearChartCommand { get; private set; }
+        public ICommand InputResetCommand { get; private set; }
         public ICommand HaltFocuserCommand { get; private set; }
         public ICommand MoveToPositionCommand { get; private set; }
         public ICommand MoveINCommand { get; private set; }
@@ -192,6 +193,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ClearChartCommand = new global::NINA.Core.Utility.RelayCommand(_ => {
                 try {
                     this.DataModel.ResetPlotData();
+                } catch { }
+            });
+            InputResetCommand = new global::NINA.Core.Utility.RelayCommand(_ => {
+                try {
+                    if (this.DataModel.GetFocusPointSize() > 0) {
+                        TargetPosition = Convert.ToInt32(MinStep);
+                    } else {
+                        TargetPosition = FocuserInfo.Position;
+                    }
+                    UserStep = Convert.ToInt32(FocuserInfo.StepSize);
                 } catch { }
             });
             HaltFocuserCommand = new global::NINA.Core.Utility.RelayCommand(_ => {

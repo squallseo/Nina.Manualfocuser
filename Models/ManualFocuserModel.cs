@@ -53,6 +53,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             this.starAnnotatorSelector = starAnnotatorSelector;
             ResetPlotData();
         }
+        public int GetFocusPointSize() {
+            return ManualFocusPoints.Count();
+        }
         public void AddFocusPoint(int position, MeasureAndError measurement) {
             var idx = ManualFocusPoints.Count();
 
