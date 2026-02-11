@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace Cwseo.NINA.Focuser.Properties {
+namespace Cwseo.NINA.ManualFocuser.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
@@ -49,7 +49,7 @@ namespace Cwseo.NINA.Focuser.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1000")]
         public int TargetPosition {
             get {
                 return ((int)(this["TargetPosition"]));
@@ -61,13 +61,25 @@ namespace Cwseo.NINA.Focuser.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
         public int UserStep {
             get {
                 return ((int)(this["UserStep"]));
             }
             set {
                 this["UserStep"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool TakeShootAfterMove {
+            get {
+                return ((bool)(this["TakeShootAfterMove"]));
+            }
+            set {
+                this["TakeShootAfterMove"] = value;
             }
         }
     }

@@ -6,11 +6,10 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace Cwseo.NINA.ManualFocuser {
+namespace Cwseo.NINA.ManualFocuser.Dockables {
     [Export(typeof(ResourceDictionary))]
-    partial class Options : ResourceDictionary {
-
-        public Options() {
+    public partial class MyPluginDockableTemplates : ResourceDictionary {
+        public MyPluginDockableTemplates() {
             InitializeComponent();
         }
     }
