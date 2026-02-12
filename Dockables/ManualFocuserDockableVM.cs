@@ -139,8 +139,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(HFRDelta));
             }
         }
-        public AsyncObservableCollection<ScatterErrorPoint> ManualFocusPoints {
-            get => this.DataModel.ManualFocusPoints;
+        public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints {
+            get => this.DataModel.HFRFocusPoints;
+        }
+        public AsyncObservableCollection<ScatterPoint> SpikeFocusPoints {
+            get => this.DataModel.SpikeFocusPoints;
         }
         public AsyncObservableCollection<DataPoint> PlotFocusPoints {
             get => this.DataModel.PlotFocusPoints;
@@ -374,7 +377,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             }
         }
         private async Task<int> CaptureFirstPoint() {
-            var idx = this.DataModel.ManualFocusPoints.Count();
+            var idx = this.DataModel.GetFocusPointSize();
             if (idx > 0) return 0;
             return await ExecuteShootAsync();
         }
@@ -386,15 +389,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 IProgress<ApplicationStatus> progress = null;
                 var filterCts = new CancellationTokenSource();
                 FilterInfo autofocusFilter = await SetAutofocusFilter(new FilterInfo(), filterCts.Token, progress);
-                Task<MeasureAndError> measurementTask = await this.DataModel.GetAverageMeasurementTask(autofocusFilter, profileService.ActiveProfile.FocuserSettings.AutoFocusNumberOfFramesPerPoint, captureCts.Token, progress);
-                MeasureAndError measurement = await measurementTask;
+                Task<(MeasureAndError,double)> measurementTask = await this.DataModel.GetAverageMeasurementTask(autofocusFilter, profileService.ActiveProfile.FocuserSettings.AutoFocusNumberOfFramesPerPoint, captureCts.Token, progress);
+                (MeasureAndError HFRmeasurement, double spike) = await measurementTask;
 
                 //If star Measurement is 0, we didn't detect any stars or shapes, and want this point to be ignored by the fitting as much as possible. Setting a very high Stdev will do the trick.
-                if (measurement.Measure == 0) {
+                if (HFRmeasurement.Measure == 0) {
                     Logger.Warning($"No stars detected. Setting a high stddev to ignore the point.");
-                    measurement.Stdev = 1000;
+                    HFRmeasurement.Stdev = 1000;
                 }
-                this.DataModel.AddFocusPoint(FocuserInfo.Position, measurement);
+                this.DataModel.AddHFRPoint(FocuserInfo.Position, HFRmeasurement);
+                this.DataModel.AddSpikePoint(FocuserInfo.Position, spike); 
                 RaisePropertyChanged(nameof(MinStep));
                 RaisePropertyChanged(nameof(MinHFR));
                 RaisePropertyChanged(nameof(StepDelta));

@@ -38,7 +38,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double MinStep { get; set; }
         public double MinHFR { get; set; }
 
-        public AsyncObservableCollection<ScatterErrorPoint> ManualFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
+        public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
+        public AsyncObservableCollection<ScatterPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterPoint>();
         public AsyncObservableCollection<DataPoint> PlotFocusPoints { get; } = new AsyncObservableCollection<DataPoint>();
         public AsyncObservableCollection<DataPoint> ArrowPoint { get; } = new AsyncObservableCollection<DataPoint>();
 
@@ -55,17 +56,17 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             ResetPlotData();
         }
         public int GetFocusPointSize() {
-            return ManualFocusPoints.Count();
+            return HFRFocusPoints.Count();
         }
-        public void AddFocusPoint(int position, MeasureAndError measurement) {
-            var idx = ManualFocusPoints.Count();
+        public void AddHFRPoint(int position, MeasureAndError measurement) {
+            var idx = HFRFocusPoints.Count();
 
             var step = Convert.ToDouble(position);
             var hfr = measurement.Measure;
             var errorY = Math.Max(0.001, measurement.Stdev);
 
             if (idx > 0) {
-                var lastpoint = ManualFocusPoints[idx - 1];
+                var lastpoint = HFRFocusPoints[idx - 1];
                 StepDelta = step - lastpoint.X;
                 HFRDelta = hfr - lastpoint.Y;
                 if (hfr < MinHFR) {
@@ -73,21 +74,28 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     MinHFR = hfr;
                 }
             } else {
-                MinStep = position;
+                MinStep = step;
                 MinHFR = hfr;
             }
 
-            ManualFocusPoints.Add(new ScatterErrorPoint(position, hfr, 0, errorY));
-            PlotFocusPoints.Add(new DataPoint(position, hfr));
+            HFRFocusPoints.Add(new ScatterErrorPoint(step, hfr, 0, errorY));
+            PlotFocusPoints.Add(new DataPoint(step, hfr));
 
             if(idx > 0) {
                 ArrowPoint[0] = PlotFocusPoints[idx - 1];
                 ArrowPoint[1] = PlotFocusPoints[idx];
             }
         }
+
+        public void AddSpikePoint(int position, double measure) {
+            var step = Convert.ToDouble(position);
+            SpikeFocusPoints.Add(new ScatterPoint(step, measure));
+        }
+
         public void ResetPlotData() {
-            ManualFocusPoints.Clear();
+            HFRFocusPoints.Clear();
             PlotFocusPoints.Clear();
+            SpikeFocusPoints.Clear();
             HFRDelta = 0.0;
             StepDelta = 0.0;
             MinStep = 0.0;
@@ -100,8 +108,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
 
 
-        public async Task<Task<MeasureAndError>> GetAverageMeasurementTask(FilterInfo filter, int exposuresPerFocusPoint, CancellationToken token, IProgress<ApplicationStatus> progress) {
-            List<Task<MeasureAndError>> measurements = new List<Task<MeasureAndError>>();
+        public async Task<Task<(MeasureAndError,double)>> GetAverageMeasurementTask(FilterInfo filter, int exposuresPerFocusPoint, CancellationToken token, IProgress<ApplicationStatus> progress) {
+            List<Task<(MeasureAndError, double)>> measurements = new List<Task<(MeasureAndError, double)>>();
 
             for (int i = 0; i < exposuresPerFocusPoint; i++) {
                 var image = await TakeExposure(filter, token, progress);
@@ -114,17 +122,21 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return EvaluateAllExposures(measurements, exposuresPerFocusPoint, token);
         }
 
-        private async Task<MeasureAndError> EvaluateAllExposures(List<Task<MeasureAndError>> measureTasks, int exposuresPerFocusPoint, CancellationToken token) {
+        private async Task<(MeasureAndError, double)> EvaluateAllExposures(List<Task<(MeasureAndError,double)>> measureTasks, int exposuresPerFocusPoint, CancellationToken token) {
             var measures = await Task.WhenAll(measureTasks);
 
             //Average HFR  of multiple exposures (if configured this way)
             double sumMeasure = 0;
             double sumVariances = 0;
+            var spikeValues = new List<double>();
             foreach (var partialMeasurement in measures) {
-                sumMeasure += partialMeasurement.Measure;
-                sumVariances += partialMeasurement.Stdev * partialMeasurement.Stdev;
+                (MeasureAndError hfr, double spike) = partialMeasurement;
+                sumMeasure += hfr.Measure;
+                sumVariances += hfr.Stdev * hfr.Stdev;
+                spikeValues.Add(spike);
             }
-            return new MeasureAndError() { Measure = sumMeasure / exposuresPerFocusPoint, Stdev = Math.Sqrt(sumVariances / exposuresPerFocusPoint) };
+            double medianSpike = SpikeAnalyzer.Median(spikeValues);
+            return (new MeasureAndError() { Measure = sumMeasure / exposuresPerFocusPoint, Stdev = Math.Sqrt(sumVariances / exposuresPerFocusPoint) }, medianSpike);
         }
         private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress) {
             IExposureData image;
@@ -201,7 +213,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return null;
         }
 
-        private async Task<MeasureAndError> EvaluateExposure(IExposureData exposureData, CancellationToken token, IProgress<ApplicationStatus> progress) {
+        private async Task<(MeasureAndError hfr, double spike)> EvaluateExposure(IExposureData exposureData, CancellationToken token, IProgress<ApplicationStatus> progress) {
             Logger.Trace("Evaluating Exposure");
 
             var imageData = await exposureData.ToImageData(progress, token);
@@ -218,7 +230,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             //Very simple to directly provide result if we use statistics based contrast detection
             if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION && profileService.ActiveProfile.FocuserSettings.ContrastDetectionMethod == ContrastDetectionMethodEnum.Statistics) {
-                return new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 };
+                return (new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 }, 0.0);
             }
 
             System.Windows.Media.PixelFormat pixelFormat;
@@ -255,7 +267,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                double averageThicknessPx = SpikeAnalyzer.TryCalculateAverageSpikeThickness(imageData, analysisResult);
+                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, analysisResult);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
@@ -266,7 +278,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
 
                 var stdev = double.IsNaN(analysisResult.HFRStdDev) ? 0 : analysisResult.HFRStdDev;
-                return new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev };
+                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeintensity);
             } else {
                 var analysis = new ContrastDetection();
                 var analysisParams = new ContrastDetectionParams() {
@@ -282,7 +294,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 var stdev = double.IsNaN(analysisResult.ContrastStdev) ? 0 : analysisResult.ContrastStdev;
                 MeasureAndError ContrastMeasurement = new MeasureAndError() { Measure = analysisResult.AverageContrast, Stdev = stdev };
-                return ContrastMeasurement;
+                return (ContrastMeasurement, 0.0);
             }
         }
     }
