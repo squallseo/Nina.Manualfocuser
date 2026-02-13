@@ -1,6 +1,8 @@
-﻿using NINA.Image.ImageAnalysis;
-using NINA.Image.Interfaces;
+﻿using NINA.Core.Enum;
 using NINA.Core.Utility;
+using NINA.Image.ImageAnalysis;
+using NINA.Image.Interfaces;
+using OxyPlot;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,25 +12,27 @@ namespace Cwseo.NINA.ManualFocuser.Models {
     public static class SpikeAnalyzer {
 
         public static double TryCalculateSigmaSquare(
-            IImageData imageData,
+            IImageData imageData, SpikeAnalysisParams param,
             StarDetectionResult starResult) {
 
             if (imageData == null || starResult == null)
                 return -1;
 
-            var stars = SelectStars(starResult);
+            var stars = SelectStars(starResult, param);
             if (stars.Count == 0)
                 return -1;
+            
+            Logger.Info($"SelectStars = {stars.Count}");
 
             var sigmaSquares = new List<double>();
 
             foreach (var star in stars) {
-                if (!TryExtractROI(imageData, star, out float[,] roi))
+                if (!TryExtractROI(imageData, star, param, out float[,] roi))
                     continue;
 
-                RemoveBackground(roi);
+                RemoveBackground(roi, param);
 
-                if (TryComputeSigmaSquare(roi, out double sigma2))
+                if (TryComputeSigmaSquare(roi, param, out double sigma2))
                     sigmaSquares.Add(sigma2);
             }
 
@@ -43,9 +47,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
         // ----------------------------------------------------
 
-        private static List<DetectedStar> SelectStars(StarDetectionResult result) {
-            double hfrMedian = result.AverageHFR;
+        private static List<DetectedStar> SelectStars(
+            StarDetectionResult result,
+            SpikeAnalysisParams param) {
 
+            // 밝기 상위 20%
             var brightThreshold = result.StarList
                 .OrderByDescending(s => s.MaxBrightness)
                 .Take(Math.Max(1, result.StarList.Count / 5))
@@ -54,14 +60,25 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             return result.StarList
                 .Where(s =>
+                    // 충분히 밝고
                     s.MaxBrightness >= brightThreshold &&
-                    s.HFR < hfrMedian * 1.3 &&
-                    s.BoundingBox.Width > 6 &&
-                    s.BoundingBox.Height > 6)
+
+                    // 최소 크기 보장 (noise blob 제거)
+                    s.BoundingBox.Width >= param.minStarSizePx &&
+                    s.BoundingBox.Height >= param.minStarSizePx &&
+
+                    // 너무 찌그러진 것 제외 (tracking error, edge)
+                    Math.Abs(
+                        s.BoundingBox.Width - s.BoundingBox.Height)
+                        <= Math.Min(
+                            s.BoundingBox.Width,
+                            s.BoundingBox.Height) * 0.5
+                )
                 .OrderByDescending(s => s.MaxBrightness)
-                .Take(3)
+                .Take(param.maxStarS)
                 .ToList();
         }
+
 
         public static double Median(IReadOnlyList<double> values) {
             if (values == null || values.Count == 0) {
@@ -89,6 +106,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private static bool TryExtractROI(
             IImageData imageData,
             DetectedStar star,
+            SpikeAnalysisParams param,
             out float[,] roi) {
 
             roi = null;
@@ -100,11 +118,18 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             int cx = (int)Math.Round(star.Position.X);
             int cy = (int)Math.Round(star.Position.Y);
 
-            int halfSize = Math.Max(
+            int baseSize = Math.Max(
                 star.BoundingBox.Width,
                 star.BoundingBox.Height) * 2;
 
-            halfSize = Math.Clamp(halfSize, 24, 64);
+            int halfSize = (int)(baseSize * param.roiScale);
+            int minHalfSize = (int)(baseSize * 1.2);
+            int maxHalfSize = (int)(baseSize * 3.5);
+
+            halfSize = Math.Clamp(halfSize, minHalfSize, maxHalfSize);
+            
+            if (halfSize > height / 4) { Logger.Info("bbox to big"); }
+            halfSize = Math.Min(halfSize, height / 4);
 
             if (cx < halfSize || cy < halfSize ||
                 cx + halfSize >= width || cy + halfSize >= height)
@@ -127,10 +152,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
         // ----------------------------------------------------
 
-        private static void RemoveBackground(float[,] roi) {
+        private static void RemoveBackground(float[,] roi, SpikeAnalysisParams param) {
             int size = roi.GetLength(0);
             int c = size / 2;
-            double rMin = size * 0.7;
+            double rMin = (size * 0.5) * param.bgRingFraction;
+            double rMin2 = rMin * rMin;
 
             var samples = new List<float>();
 
@@ -138,7 +164,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 for (int x = 0; x < size; x++) {
                     double dx = x - c;
                     double dy = y - c;
-                    if (Math.Sqrt(dx * dx + dy * dy) >= rMin)
+                    if ((dx * dx + dy * dy) >= rMin2)
                         samples.Add(roi[x, y]);
                 }
             }
@@ -156,13 +182,21 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // ----------------------------------------------------
 
         private static bool TryComputeSigmaSquare(
-            float[,] roi,
+            float[,] roi, SpikeAnalysisParams param,
             out double sigma2) {
 
             sigma2 = 0;
 
             int size = roi.GetLength(0);
             int c = size / 2;
+
+            double maxI = 0;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    if (roi[x, y] > maxI)
+                        maxI = roi[x, y];
+
+            double saturationThreshold = maxI * param.saturationLevel;
 
             double sumI = 0;
             double sumX = 0;
@@ -171,7 +205,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
                     double I = roi[x, y];
-                    if (I <= 0) continue;
+                    if (I <= 0 || I >= saturationThreshold) continue;
 
                     sumI += I;
                     sumX += I * x;
@@ -187,14 +221,21 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             double sumR2 = 0;
 
+            double coreCut = size * param.coreCutFraction; // ROI 반경의 15%
+            double coreCut2 = coreCut * coreCut;
+
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
                     double I = roi[x, y];
-                    if (I <= 0) continue;
+                    if (I <= 0 || I >= saturationThreshold) continue;
 
                     double dx = x - mx;
                     double dy = y - my;
-                    sumR2 += I * (dx * dx + dy * dy);
+                    double r2 = dx * dx + dy * dy;
+                    if (r2 < coreCut2)
+                        continue;
+
+                    sumR2 += I * r2;
                 }
             }
 
@@ -220,4 +261,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 : (arr[n / 2 - 1] + arr[n / 2]) * 0.5f;
         }
     }//class
+
+    public class SpikeAnalysisParams {
+        public double roiScale { get; set; } = 2.0;//1.5~3.0 - 초점근처에서 1.5쪽으로, split수준 3, 협대역 좀 크게 2.5
+        public double coreCutFraction { get; set; } = 0.15;//0.1~0.25
+        public double bgRingFraction { get; set; } = 0.7;//0.65~0.8
+        public double minStarSizePx { get; set; } = 6; //5~8 시잉 좋으면 5로,,
+        public double saturationLevel { get; set; } = 0.9;//0.9 ~ 0.95; //camera full well의 90~95%
+        public int maxStarS { get; set; } = 5; //3~8 산개성단 3~5, 은하 5~8 협대역 3~4
+
+
+    }
 }//namespace

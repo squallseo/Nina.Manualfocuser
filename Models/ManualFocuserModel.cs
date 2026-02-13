@@ -265,9 +265,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     }
                 }
 
+                var spikeParams = new SpikeAnalysisParams();
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, analysisResult);
+                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, spikeParams, analysisResult);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
