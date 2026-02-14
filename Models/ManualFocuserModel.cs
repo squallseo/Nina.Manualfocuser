@@ -24,10 +24,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace Cwseo.NINA.ManualFocuser.Models {
     public class ManualFocuserModel {
-
         private IProfileService profileService;
         private IImagingMediator imagingMediator;
         private ICameraMediator cameraMediator;
@@ -264,11 +264,17 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         analysisParams.OuterCropRatio = profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio;
                     }
                 }
-
-                var spikeParams = new SpikeAnalysisParams();
+                var spikeParam = new SpikeAnalysisParams() {
+                    roiScale = Properties.Settings.Default.RoiScale,
+                    coreCutFraction = Properties.Settings.Default.CoreCutFraction,
+                    bgRingFraction = Properties.Settings.Default.BgRingFraction,
+                    minStarSizePx = Properties.Settings.Default.MinStarSizePx,
+                    saturationLevel = Properties.Settings.Default.SaturationLevel,
+                    maxStarS = Properties.Settings.Default.MaxStars
+                };
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, spikeParams, analysisResult);
+                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, spikeParam, analysisResult);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {

@@ -22,7 +22,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             if (stars.Count == 0)
                 return -1;
             
-            Logger.Info($"SelectStars = {stars.Count}");
+            Logger.Debug($"SelectStars = {stars.Count}");
 
             var sigmaSquares = new List<double>();
 
@@ -40,7 +40,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 return -1;
 
             double result = Median(sigmaSquares);
-            Logger.Info($"Sigma^2 = {result:F2} px^2");
+            Logger.Debug($"Sigma^2 = {result:F2} px^2");
 
             return result;
         }
@@ -128,7 +128,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             halfSize = Math.Clamp(halfSize, minHalfSize, maxHalfSize);
             
-            if (halfSize > height / 4) { Logger.Info("bbox to big"); }
+            if (halfSize > height / 4) { Logger.Warning("bbox to big"); }
             halfSize = Math.Min(halfSize, height / 4);
 
             if (cx < halfSize || cy < halfSize ||
@@ -193,8 +193,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double maxI = 0;
             for (int y = 0; y < size; y++)
                 for (int x = 0; x < size; x++)
-                    if (roi[x, y] > maxI)
-                        maxI = roi[x, y];
+                    if (roi[y, x] > maxI)
+                        maxI = roi[y, x];
 
             double saturationThreshold = maxI * param.saturationLevel;
 
@@ -204,7 +204,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
-                    double I = roi[x, y];
+                    double I = roi[y, x];
                     if (I <= 0 || I >= saturationThreshold) continue;
 
                     sumI += I;
@@ -226,7 +226,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             for (int y = 0; y < size; y++) {
                 for (int x = 0; x < size; x++) {
-                    double I = roi[x, y];
+                    double I = roi[y, x];
                     if (I <= 0 || I >= saturationThreshold) continue;
 
                     double dx = x - mx;
@@ -262,14 +262,12 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         }
     }//class
 
-    public class SpikeAnalysisParams {
-        public double roiScale { get; set; } = 2.0;//1.5~3.0 - 초점근처에서 1.5쪽으로, split수준 3, 협대역 좀 크게 2.5
-        public double coreCutFraction { get; set; } = 0.15;//0.1~0.25
-        public double bgRingFraction { get; set; } = 0.7;//0.65~0.8
-        public double minStarSizePx { get; set; } = 6; //5~8 시잉 좋으면 5로,,
-        public double saturationLevel { get; set; } = 0.9;//0.9 ~ 0.95; //camera full well의 90~95%
-        public int maxStarS { get; set; } = 5; //3~8 산개성단 3~5, 은하 5~8 협대역 3~4
-
-
+    public class SpikeAnalysisParams{
+        public double roiScale { get; set; }
+        public double coreCutFraction { get; set; }
+        public double bgRingFraction { get; set; }
+        public double minStarSizePx { get; set; }
+        public double saturationLevel { get; set; }
+        public int maxStarS { get; set; }
     }
 }//namespace

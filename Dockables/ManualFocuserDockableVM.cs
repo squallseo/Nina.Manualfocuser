@@ -189,7 +189,6 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.cameraMediator.RegisterConsumer(this);
             this.filterWheelMediator.RegisterConsumer(this);
             this.guiderMediator.RegisterConsumer(this);
-
             this.DataModel = new ManualFocuserModel(profileService, imagingMediator, cameraMediator, starDetectionSelector, starAnnotatorSelector);
 
 

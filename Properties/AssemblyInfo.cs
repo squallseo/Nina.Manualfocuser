@@ -51,9 +51,17 @@ using System.Runtime.InteropServices;
 //[Optional] An additional url to an example example screenshot of your plugin in action
 [assembly: AssemblyMetadata("AltScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/screenshot_alt.png?raw=true")]
 //[Optional] An in-depth description of your plugin
-[assembly: AssemblyMetadata("LongDescription", @"NINA’s built-in autofocus is already fast and good enough, but it has a drawback: the user has to judge and manually enter an appropriate autofocus step size. Also, since it searches only based on star HFR, when trying to find a truly better focus point, the user ends up fine-tuning by checking additional cues such as star shapes near the edges, spikes, and other details.
+[assembly: AssemblyMetadata("LongDescription", @"NINA’s built-in autofocus is already fast and good enough, but it has a drawback:
 
-I want to create an environment that makes this process more convenient, and further, to build the foundation for eventually automating it.")]
+the user has to judge and manually enter an appropriate autofocus step size.
+
+Also, since it searches only based on star HFR, when trying to find a truly better focus point,
+
+the user ends up fine-tuning by checking additional cues such as star shapes near the edges, spikes, and other details.
+
+I want to create an environment that makes this process more convenient, 
+
+and further, to build the foundation for eventually automating it.")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from

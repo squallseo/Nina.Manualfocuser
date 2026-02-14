@@ -214,8 +214,8 @@
                 </oxy:Plot.Legends>                
                 <oxy:Plot.Axes>
                     <oxy:LinearAxis
-                        Title="Average HFR"
-                        TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
+                    Title="Average HFR"
+                    TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     EndPosition="1"
                     IsPanEnabled="False"
@@ -230,8 +230,8 @@
                     TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
                     <oxy:LinearAxis
-                        Title="Spike - Intensity 2nd Moment"
-                        TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
+                    Title="Spike - Intensity 2nd Moment"
+                    TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     EndPosition="1"
                     IsPanEnabled="False"
@@ -247,8 +247,8 @@
                     TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
                     <oxy:LinearAxis
-                        Title="Focuser Position"
-                        TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
+                    Title="Focuser Position"
+                    TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                     EndPosition="1"
                     IsPanEnabled="False"

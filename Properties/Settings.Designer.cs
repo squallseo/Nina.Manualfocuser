@@ -82,5 +82,77 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
                 this["TakeShootAfterMove"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("2")]
+        public double RoiScale {
+            get {
+                return ((double)(this["RoiScale"]));
+            }
+            set {
+                this["RoiScale"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.15")]
+        public double CoreCutFraction {
+            get {
+                return ((double)(this["CoreCutFraction"]));
+            }
+            set {
+                this["CoreCutFraction"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.7")]
+        public double BgRingFraction {
+            get {
+                return ((double)(this["BgRingFraction"]));
+            }
+            set {
+                this["BgRingFraction"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("6")]
+        public int MinStarSizePx {
+            get {
+                return ((int)(this["MinStarSizePx"]));
+            }
+            set {
+                this["MinStarSizePx"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.9")]
+        public double SaturationLevel {
+            get {
+                return ((double)(this["SaturationLevel"]));
+            }
+            set {
+                this["SaturationLevel"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("5")]
+        public int MaxStars {
+            get {
+                return ((int)(this["MaxStars"]));
+            }
+            set {
+                this["MaxStars"] = value;
+            }
+        }
     }
 }
