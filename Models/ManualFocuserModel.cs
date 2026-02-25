@@ -39,7 +39,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double MinHFR { get; set; }
 
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
-        public AsyncObservableCollection<ScatterPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterPoint>();
+        public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<DataPoint> PlotFocusPoints { get; } = new AsyncObservableCollection<DataPoint>();
         public AsyncObservableCollection<DataPoint> ArrowPoint { get; } = new AsyncObservableCollection<DataPoint>();
 
@@ -87,9 +87,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             }
         }
 
-        public void AddSpikePoint(int position, double measure) {
+        public void AddSpikePoint(int position, MeasureAndError measurement) {
             var step = Convert.ToDouble(position);
-            SpikeFocusPoints.Add(new ScatterPoint(step, measure));
+            SpikeFocusPoints.Add(new ScatterErrorPoint(step, measurement.Measure, 0, measurement.Stdev));
         }
 
         public void ResetPlotData() {
@@ -108,8 +108,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
 
 
-        public async Task<Task<(MeasureAndError,double)>> GetAverageMeasurementTask(FilterInfo filter, int exposuresPerFocusPoint, CancellationToken token, IProgress<ApplicationStatus> progress) {
-            List<Task<(MeasureAndError, double)>> measurements = new List<Task<(MeasureAndError, double)>>();
+        public async Task<Task<(MeasureAndError, MeasureAndError)>> GetAverageMeasurementTask(FilterInfo filter, int exposuresPerFocusPoint, CancellationToken token, IProgress<ApplicationStatus> progress) {
+            List<Task<(MeasureAndError, MeasureAndError)>> measurements = new List<Task<(MeasureAndError, MeasureAndError)>>();
 
             for (int i = 0; i < exposuresPerFocusPoint; i++) {
                 var image = await TakeExposure(filter, token, progress);
@@ -122,21 +122,22 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return EvaluateAllExposures(measurements, exposuresPerFocusPoint, token);
         }
 
-        private async Task<(MeasureAndError, double)> EvaluateAllExposures(List<Task<(MeasureAndError,double)>> measureTasks, int exposuresPerFocusPoint, CancellationToken token) {
+        private async Task<(MeasureAndError, MeasureAndError)> EvaluateAllExposures(List<Task<(MeasureAndError, MeasureAndError)>> measureTasks, int exposuresPerFocusPoint, CancellationToken token) {
             var measures = await Task.WhenAll(measureTasks);
 
             //Average HFR  of multiple exposures (if configured this way)
             double sumMeasure = 0;
             double sumVariances = 0;
+            double sumVariancesSpike = 0;
             var spikeValues = new List<double>();
             foreach (var partialMeasurement in measures) {
-                (MeasureAndError hfr, double spike) = partialMeasurement;
+                (MeasureAndError hfr, MeasureAndError spike) = partialMeasurement;
                 sumMeasure += hfr.Measure;
                 sumVariances += hfr.Stdev * hfr.Stdev;
-                spikeValues.Add(spike);
+                sumVariancesSpike += spike.Stdev * spike.Stdev;
+                spikeValues.Add(spike.Measure);
             }
-            double medianSpike = SpikeAnalyzer.Median(spikeValues);
-            return (new MeasureAndError() { Measure = sumMeasure / exposuresPerFocusPoint, Stdev = Math.Sqrt(sumVariances / exposuresPerFocusPoint) }, medianSpike);
+            return (new MeasureAndError() { Measure = sumMeasure / exposuresPerFocusPoint, Stdev = Math.Sqrt(sumVariances / exposuresPerFocusPoint) }, new MeasureAndError() { Measure = SpikeAnalyzer.Median(spikeValues), Stdev = Math.Sqrt(sumVariancesSpike / exposuresPerFocusPoint) });
         }
         private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress) {
             IExposureData image;
@@ -213,7 +214,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return null;
         }
 
-        private async Task<(MeasureAndError hfr, double spike)> EvaluateExposure(IExposureData exposureData, CancellationToken token, IProgress<ApplicationStatus> progress) {
+        private async Task<(MeasureAndError hfr, MeasureAndError spike)> EvaluateExposure(IExposureData exposureData, CancellationToken token, IProgress<ApplicationStatus> progress) {
             Logger.Trace("Evaluating Exposure");
 
             var imageData = await exposureData.ToImageData(progress, token);
@@ -230,7 +231,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             //Very simple to directly provide result if we use statistics based contrast detection
             if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION && profileService.ActiveProfile.FocuserSettings.ContrastDetectionMethod == ContrastDetectionMethodEnum.Statistics) {
-                return (new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 }, 0.0);
+                return (new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 }, new MeasureAndError() { Measure = 0, Stdev = 0}  );
             }
 
             System.Windows.Media.PixelFormat pixelFormat;
@@ -264,17 +265,18 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         analysisParams.OuterCropRatio = profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio;
                     }
                 }
-                var spikeParam = new SpikeAnalysisParams() {
+                var spikeParam = new SpikeAnalysisParams() { 
                     roiScale = Properties.Settings.Default.RoiScale,
-                    coreCutFraction = Properties.Settings.Default.CoreCutFraction,
+                    //coreCutFraction = Properties.Settings.Default.CoreCutFraction,
                     bgRingFraction = Properties.Settings.Default.BgRingFraction,
                     minStarSizePx = Properties.Settings.Default.MinStarSizePx,
-                    saturationLevel = Properties.Settings.Default.SaturationLevel,
-                    maxStarS = Properties.Settings.Default.MaxStars
+                    //saturationLevel = Properties.Settings.Default.SaturationLevel,
+                    maxStarS = Properties.Settings.Default.MaxStars,
+                    spikeAngleDeg = Properties.Settings.Default.spikeAngleDeg
                 };
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                double spikeintensity = SpikeAnalyzer.TryCalculateSigmaSquare(imageData, spikeParam, analysisResult);
+                MeasureAndError spikeResult = SpikeAnalyzer.TryCalculateSpikeMetric(imageData, spikeParam, analysisResult);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
@@ -285,7 +287,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
 
                 var stdev = double.IsNaN(analysisResult.HFRStdDev) ? 0 : analysisResult.HFRStdDev;
-                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeintensity);
+                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeResult);
             } else {
                 var analysis = new ContrastDetection();
                 var analysisParams = new ContrastDetectionParams() {
@@ -301,7 +303,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 var stdev = double.IsNaN(analysisResult.ContrastStdev) ? 0 : analysisResult.ContrastStdev;
                 MeasureAndError ContrastMeasurement = new MeasureAndError() { Measure = analysisResult.AverageContrast, Stdev = stdev };
-                return (ContrastMeasurement, 0.0);
+                MeasureAndError dummyspike = new MeasureAndError() { Measure = 0, Stdev = 0 };
+                return (ContrastMeasurement, dummyspike);
             }
         }
     }

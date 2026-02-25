@@ -230,7 +230,7 @@
                     TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
                     <oxy:LinearAxis
-                    Title="Spike - Intensity 2nd Moment"
+                    Title="Spike Metric"
                     TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     EndPosition="1"
@@ -267,13 +267,15 @@
                         Title="HFR"
                         ItemsSource="{Binding HFRFocusPoints}" 
                         MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
+                        ErrorBarColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                         MarkerSize="4"
                         MarkerType="Circle"/>
-                    <oxy:ScatterSeries
+                    <oxy:ScatterErrorSeries
                         Title="Spike"
                         YAxisKey="SecondaryY"
                         ItemsSource="{Binding SpikeFocusPoints}" 
                         MarkerFill="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
+                        ErrorBarColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
                         MarkerSize="5"
                         MarkerType="Diamond"/>
                 </oxy:Plot.Series>

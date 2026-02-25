@@ -142,7 +142,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints {
             get => this.DataModel.HFRFocusPoints;
         }
-        public AsyncObservableCollection<ScatterPoint> SpikeFocusPoints {
+        public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints {
             get => this.DataModel.SpikeFocusPoints;
         }
         public AsyncObservableCollection<DataPoint> PlotFocusPoints {
@@ -388,8 +388,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 IProgress<ApplicationStatus> progress = null;
                 var filterCts = new CancellationTokenSource();
                 FilterInfo autofocusFilter = await SetAutofocusFilter(new FilterInfo(), filterCts.Token, progress);
-                Task<(MeasureAndError,double)> measurementTask = await this.DataModel.GetAverageMeasurementTask(autofocusFilter, profileService.ActiveProfile.FocuserSettings.AutoFocusNumberOfFramesPerPoint, captureCts.Token, progress);
-                (MeasureAndError HFRmeasurement, double spike) = await measurementTask;
+                Task<(MeasureAndError, MeasureAndError)> measurementTask = await this.DataModel.GetAverageMeasurementTask(autofocusFilter, profileService.ActiveProfile.FocuserSettings.AutoFocusNumberOfFramesPerPoint, captureCts.Token, progress);
+                (MeasureAndError HFRmeasurement, MeasureAndError spike) = await measurementTask;
 
                 //If star Measurement is 0, we didn't detect any stars or shapes, and want this point to be ignored by the fitting as much as possible. Setting a very high Stdev will do the trick.
                 if (HFRmeasurement.Measure == 0) {

@@ -116,6 +116,18 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
+        public double SpikeAngle {
+            get {
+                // 저장된 값 가져오기
+                return Properties.Settings.Default.spikeAngleDeg;
+            }
+            set {
+                Properties.Settings.Default.spikeAngleDeg = value; // Settings에 저장
+                Properties.Settings.Default.Save(); // 저장 반영
+                RaisePropertyChanged(nameof(SpikeAngle));
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
         protected void RaisePropertyChanged([CallerMemberName] string propertyName = null) {
             this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

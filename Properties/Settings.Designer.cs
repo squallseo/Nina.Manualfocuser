@@ -154,5 +154,17 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
                 this["MaxStars"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("90")]
+        public double spikeAngleDeg {
+            get {
+                return ((double)(this["spikeAngleDeg"]));
+            }
+            set {
+                this["spikeAngleDeg"] = value;
+            }
+        }
     }
 }
