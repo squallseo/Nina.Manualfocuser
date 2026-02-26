@@ -275,7 +275,7 @@
                         YAxisKey="SecondaryY"
                         ItemsSource="{Binding SpikeFocusPoints}" 
                         MarkerFill="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                        ErrorBarColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
+                        ErrorBarColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                         MarkerSize="5"
                         MarkerType="Diamond"/>
                 </oxy:Plot.Series>

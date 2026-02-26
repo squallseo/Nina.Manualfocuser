@@ -33,6 +33,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private ICameraMediator cameraMediator;
         private IPluggableBehaviorSelector<IStarDetection> starDetectionSelector;
         private IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector;
+        SpikeTrackingState trackingState = null;
         public double HFRDelta { get; set; }
         public double StepDelta { get; set; }
         public double MinStep { get; set; }
@@ -276,7 +277,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 };
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                MeasureAndError spikeResult = SpikeAnalyzer.TryCalculateSpikeMetric(imageData, spikeParam, analysisResult);
+                var spikeOut = SpikeAnalyzer.TryCalculateSpikeMetricAuto(imageData, spikeParam, analysisResult, ref trackingState);
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
@@ -287,7 +288,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
 
                 var stdev = double.IsNaN(analysisResult.HFRStdDev) ? 0 : analysisResult.HFRStdDev;
-                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeResult);
+                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeOut.Spike);
             } else {
                 var analysis = new ContrastDetection();
                 var analysisParams = new ContrastDetectionParams() {
