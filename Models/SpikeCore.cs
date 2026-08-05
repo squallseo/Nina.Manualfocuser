@@ -23,6 +23,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // User-provided spike angle (deg)
         public double spikeAngleDeg { get; set; } = 90.0;
 
+        // Measure the spike orientation from the image and use it instead of
+        // spikeAngleDeg. The orientation is always measured and reported; this
+        // only controls whether the metric acts on it.
+        public bool autoSpikeAngle { get; set; } = false;
+
+        // Peak-over-mean a directional profile must reach before it counts as a
+        // spike rather than noise.
+        public double angleMinStrength { get; set; } = 1.15;
+
         // Local u-gaussian sigma (tau)
         public double coreSigmaPx { get; set; } = 1.5;
 
@@ -81,6 +90,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double VarC { get; set; }
         public double VarG { get; set; }
         public double Kurtosis { get; set; }
+
+        /// <summary>Spike orientation measured on this star, or NaN.</summary>
+        public double AngleDeg { get; set; } = double.NaN;
     }
 
     public sealed class TrackedStar {
@@ -100,6 +112,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public List<SpikeStarPoint> LastStarPoints { get; set; } = new List<SpikeStarPoint>();
 
         public int MaxMissedFrames { get; set; } = 12;
+
+        // Running spike orientation. Kept across frames so the reported angle does
+        // not flip between the two axes of a four vane spider.
+        public double LastAngleDeg { get; set; } = double.NaN;
+        public double LastAngleStrength { get; set; } = 0;
     }
 
     public enum SpikeStatus {
@@ -119,33 +136,31 @@ namespace Cwseo.NINA.ManualFocuser.Models {
     // negative sentinel - a sentinel that lands on a plot axis
     // destroys the scale and hides the real curve.
     // ========================================================
-    public readonly struct SpikeFrameResult {
-        public SpikeFrameResult(SpikeStatus status, double metric, double spread, int usedStars,
-                                double medVarC, double medVarG, double medKurtosis,
-                                List<SpikeStarPoint> starPoints) {
-            Status = status;
-            Metric = metric;
-            Spread = spread;
-            UsedStars = usedStars;
-            MedianVarC = medVarC;
-            MedianVarG = medVarG;
-            MedianKurtosis = medKurtosis;
-            StarPoints = starPoints ?? new List<SpikeStarPoint>();
-        }
+    public sealed class SpikeFrameResult {
+        public SpikeStatus Status { get; init; } = SpikeStatus.Ok;
+        public double Metric { get; init; } = double.NaN;
+        public double Spread { get; init; } = 0;
+        public int UsedStars { get; init; } = 0;
+        public double MedianVarC { get; init; } = double.NaN;
+        public double MedianVarG { get; init; } = double.NaN;
+        public double MedianKurtosis { get; init; } = double.NaN;
 
-        public SpikeStatus Status { get; }
-        public double Metric { get; }
-        public double Spread { get; }
-        public int UsedStars { get; }
-        public double MedianVarC { get; }
-        public double MedianVarG { get; }
-        public double MedianKurtosis { get; }
-        public List<SpikeStarPoint> StarPoints { get; }
+        /// <summary>Spike orientation measured from this frame, or NaN.</summary>
+        public double MeasuredAngleDeg { get; init; } = double.NaN;
+
+        /// <summary>Peak over mean of the directional profile behind MeasuredAngleDeg.</summary>
+        public double AngleStrength { get; init; } = 0;
+
+        /// <summary>The angle the metric was actually computed with.</summary>
+        public double UsedAngleDeg { get; init; } = double.NaN;
+
+        public List<SpikeStarPoint> StarPoints { get; init; } = new List<SpikeStarPoint>();
 
         public bool IsValid => Status == SpikeStatus.Ok && !double.IsNaN(Metric);
+        public bool HasAngleEstimate => !double.IsNaN(MeasuredAngleDeg);
 
         public static SpikeFrameResult Failed(SpikeStatus status)
-            => new SpikeFrameResult(status, double.NaN, 0, 0, double.NaN, double.NaN, double.NaN, null);
+            => new SpikeFrameResult { Status = status };
     }
 
     // ========================================================
@@ -202,8 +217,25 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 .ToList();
         }
 
+        // Per-star intermediate state, kept between the two passes.
+        private sealed class RoiWork {
+            public TrackedStar Star;
+            public float[] Roi;
+            public int Size;
+            public double OffX;
+            public double OffY;
+            public double AngleDeg = double.NaN;
+            public double AngleStrength;
+        }
+
         // ====================================================
         // Evaluate one frame against an existing tracking state
+        //
+        // Two passes: the first extracts every ROI and measures the spike
+        // orientation, the second computes the metric. They are separate because
+        // the orientation is a property of the frame, not of one star - taking
+        // the median over all stars before using it keeps a single noisy star
+        // from steering the whole measurement.
         // ====================================================
         public static SpikeFrameResult Evaluate(
             ushort[] data,
@@ -222,11 +254,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             PruneOldTracks(state);
 
-            var metrics = new List<double>(state.TrackedStars.Count);
-            var varCs = new List<double>(state.TrackedStars.Count);
-            var varGs = new List<double>(state.TrackedStars.Count);
-            var kurts = new List<double>(state.TrackedStars.Count);
-            var perStar = new List<SpikeStarPoint>(state.TrackedStars.Count);
+            // ---------- pass 1: ROI, background, centroid, orientation ----------
+            var work = new List<RoiWork>(state.TrackedStars.Count);
 
             foreach (var t in state.TrackedStars) {
                 if (!TryExtractROIAt(data, width, height, t.X, t.Y, t.BaseSizePx, param,
@@ -254,23 +283,70 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     t.MissCount = 0;
                 }
 
-                if (TryComputeSpikeMetric(roi, roiSize, param, cxOff, cyOff, out SpikeTerms terms)) {
+                var item = new RoiWork { Star = t, Roi = roi, Size = roiSize, OffX = cxOff, OffY = cyOff };
+
+                double rOuter = roiSize / 2.0 - 2.0;
+                double rInner = Math.Max(Math.Max(6.0, param.coreRejectSigmaPx), roiSize * 0.15);
+                if (rOuter > rInner + 4) {
+                    item.AngleDeg = EstimateAngleDeg(
+                        roi, roiSize,
+                        roiSize / 2.0 + cxOff, roiSize / 2.0 + cyOff,
+                        rInner, rOuter,
+                        state.LastAngleDeg,
+                        out double strength);
+                    item.AngleStrength = strength;
+                }
+
+                work.Add(item);
+            }
+
+            // ---------- frame orientation ----------
+            var usable = work.Where(w => !double.IsNaN(w.AngleDeg) && w.AngleStrength >= param.angleMinStrength).ToList();
+
+            double measuredAngle = state.LastAngleDeg;
+            double measuredStrength = state.LastAngleStrength;
+
+            // Median across stars, not across frames. Averaging over frames was tried
+            // and measured worse: a focus sweep spans states where the orientation is
+            // crisp and states where it is not, so a time window mixes good estimates
+            // with bad ones instead of averaging repeats of the same measurement.
+            if (usable.Count > 0) {
+                measuredAngle = CircularMedianDeg(usable.Select(w => w.AngleDeg).ToList(), state.LastAngleDeg);
+                measuredStrength = Median(usable.Select(w => w.AngleStrength).ToList());
+
+                state.LastAngleDeg = measuredAngle;
+                state.LastAngleStrength = measuredStrength;
+            }
+
+            double usedAngle = param.spikeAngleDeg;
+            if (param.autoSpikeAngle && !double.IsNaN(measuredAngle)) usedAngle = measuredAngle;
+
+            // ---------- pass 2: metric ----------
+            var metrics = new List<double>(work.Count);
+            var varCs = new List<double>(work.Count);
+            var varGs = new List<double>(work.Count);
+            var kurts = new List<double>(work.Count);
+            var perStar = new List<SpikeStarPoint>(work.Count);
+
+            foreach (var w in work) {
+                if (TryComputeSpikeMetric(w.Roi, w.Size, param, usedAngle, w.OffX, w.OffY, out SpikeTerms terms)) {
                     metrics.Add(terms.J);
                     varCs.Add(terms.VarC);
                     varGs.Add(terms.VarG);
                     kurts.Add(terms.Kurtosis);
 
                     perStar.Add(new SpikeStarPoint {
-                        X = t.X,
-                        Y = t.Y,
+                        X = w.Star.X,
+                        Y = w.Star.Y,
                         Metric = terms.J,
                         VarC = terms.VarC,
                         VarG = terms.VarG,
                         Kurtosis = terms.Kurtosis,
-                        BoxSizePx = Math.Clamp((int)Math.Round(t.BaseSizePx * 2.0), 12, 120)
+                        AngleDeg = w.AngleDeg,
+                        BoxSizePx = Math.Clamp((int)Math.Round(w.Star.BaseSizePx * 2.0), 12, 120)
                     });
                 } else {
-                    t.MissCount++;
+                    w.Star.MissCount++;
                 }
             }
 
@@ -278,22 +354,141 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             state.LastUsedStars = metrics.Count;
             state.LastStarPoints = perStar;
 
-            if (metrics.Count == 0)
-                return SpikeFrameResult.Failed(SpikeStatus.NoValidStars);
+            if (metrics.Count == 0) {
+                return new SpikeFrameResult {
+                    Status = SpikeStatus.NoValidStars,
+                    MeasuredAngleDeg = measuredAngle,
+                    AngleStrength = measuredStrength
+                };
+            }
 
-            if (metrics.Count < Math.Max(1, param.minUsedStarsForValidFrame))
-                return new SpikeFrameResult(SpikeStatus.TooFewStars, double.NaN, 0, metrics.Count,
-                                            Median(varCs), Median(varGs), Median(kurts), perStar);
+            var status = metrics.Count < Math.Max(1, param.minUsedStarsForValidFrame)
+                ? SpikeStatus.TooFewStars
+                : SpikeStatus.Ok;
 
-            return new SpikeFrameResult(
-                SpikeStatus.Ok,
-                Median(metrics),
-                StdDevSample(metrics),
-                metrics.Count,
-                Median(varCs),
-                Median(varGs),
-                Median(kurts),
-                perStar);
+            return new SpikeFrameResult {
+                Status = status,
+                Metric = status == SpikeStatus.Ok ? Median(metrics) : double.NaN,
+                Spread = status == SpikeStatus.Ok ? StdDevSample(metrics) : 0,
+                UsedStars = metrics.Count,
+                MedianVarC = Median(varCs),
+                MedianVarG = Median(varGs),
+                MedianKurtosis = Median(kurts),
+                MeasuredAngleDeg = measuredAngle,
+                AngleStrength = measuredStrength,
+                UsedAngleDeg = usedAngle,
+                StarPoints = perStar
+            };
+        }
+
+        // ====================================================
+        // Spike orientation
+        //
+        // Integrates background subtracted flux along rays through the star and
+        // picks the direction that collects the most. Sampling both directions of
+        // each ray makes it a line integral: a spike is a line, not a ray, so the
+        // result is only defined modulo 180 degrees.
+        // ====================================================
+        public static double EstimateAngleDeg(
+            float[] roi,
+            int size,
+            double centerX,
+            double centerY,
+            double rInner,
+            double rOuter,
+            double preferNearDeg,
+            out double strength) {
+
+            strength = 0;
+            const int bins = 180;   // one bin per degree
+
+            if (roi == null || rOuter - rInner < 4) return double.NaN;
+
+            var profile = new double[bins];
+            for (int b = 0; b < bins; b++) {
+                double a = b * Math.PI / bins;
+                double ca = Math.Cos(a), sa = Math.Sin(a);
+
+                double sum = 0;
+                int n = 0;
+                for (double r = rInner; r <= rOuter; r += 1.0) {
+                    for (int sign = -1; sign <= 1; sign += 2) {
+                        int x = (int)Math.Round(centerX + sign * r * ca);
+                        int y = (int)Math.Round(centerY + sign * r * sa);
+                        if (x < 0 || y < 0 || x >= size || y >= size) continue;
+                        double v = roi[y * size + x];
+                        if (v > 0) sum += v;
+                        n++;
+                    }
+                }
+                profile[b] = n > 0 ? sum / n : 0;
+            }
+
+            var sm = new double[bins];
+            for (int b = 0; b < bins; b++) {
+                double s = 0;
+                for (int k = -2; k <= 2; k++) s += profile[((b + k) % bins + bins) % bins];
+                sm[b] = s / 5.0;
+            }
+
+            double mean = sm.Average();
+            if (mean <= 0) return double.NaN;
+
+            int best = 0;
+            for (int b = 1; b < bins; b++) if (sm[b] > sm[best]) best = b;
+            double bestVal = sm[best];
+            if (bestVal <= 0) return double.NaN;
+
+            // A four vane spider produces two axes 90 degrees apart of similar
+            // strength. Without this the reported angle hops between them frame to
+            // frame, which would make an auto angle worse than a fixed one.
+            if (!double.IsNaN(preferNearDeg)) {
+                int near = -1;
+                for (int b = 0; b < bins; b++) {
+                    if (CircularDistanceDeg(b, preferNearDeg) > 35.0) continue;
+                    if (near < 0 || sm[b] > sm[near]) near = b;
+                }
+                if (near >= 0 && sm[near] >= 0.75 * bestVal) best = near;
+            }
+
+            // sub-degree refinement from the two neighbouring bins
+            double ym1 = sm[(best - 1 + bins) % bins];
+            double y0 = sm[best];
+            double yp1 = sm[(best + 1) % bins];
+            double denom = ym1 - 2 * y0 + yp1;
+            double shift = Math.Abs(denom) > 1e-12 ? 0.5 * (ym1 - yp1) / denom : 0;
+            shift = Math.Clamp(shift, -1.0, 1.0);
+
+            strength = y0 / mean;
+            return Wrap180((best + shift) * 180.0 / bins);
+        }
+
+        private static double CircularDistanceDeg(double a, double b) {
+            double d = Math.Abs(a - b) % 180.0;
+            return Math.Min(d, 180.0 - d);
+        }
+
+        private static double Wrap180(double deg) => ((deg % 180.0) + 180.0) % 180.0;
+
+        /// <summary>
+        /// Median of angles that are only defined modulo 180 degrees.
+        ///
+        /// Unwrapping needs a reference to fold the values around. Passing a stable
+        /// one (the previous estimate) matters: anchoring on an arbitrary element of
+        /// a sliding window lets the result jump whenever that element ages out.
+        /// </summary>
+        public static double CircularMedianDeg(IReadOnlyList<double> anglesDeg, double anchorDeg = double.NaN) {
+            if (anglesDeg == null || anglesDeg.Count == 0) return double.NaN;
+
+            double anchor = double.IsNaN(anchorDeg) ? anglesDeg[0] : anchorDeg;
+            var unwrapped = new List<double>(anglesDeg.Count);
+            foreach (var a in anglesDeg) {
+                double v = a;
+                while (v - anchor > 90.0) v -= 180.0;
+                while (v - anchor < -90.0) v += 180.0;
+                unwrapped.Add(v);
+            }
+            return Wrap180(Median(unwrapped));
         }
 
         private static void PruneOldTracks(SpikeTrackingState state) {
@@ -454,6 +649,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             float[] roi,
             int size,
             SpikeAnalysisParams param,
+            double angleDeg,
             double centerOffsetX,
             double centerOffsetY,
             out SpikeTerms terms) {
@@ -464,7 +660,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double centerX = baseCenter + centerOffsetX;
             double centerY = baseCenter + centerOffsetY;
 
-            double theta = param.spikeAngleDeg * Math.PI / 180.0;
+            double theta = angleDeg * Math.PI / 180.0;
             double cosT = Math.Cos(theta);
             double sinT = Math.Sin(theta);
 

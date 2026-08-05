@@ -89,7 +89,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             Logger.Debug(
                 $"[ManualFocuser/Spike] {context} pos={focuserPosition} " +
                 $"J={r.Metric:F4} spread={r.Spread:F4} stars={r.UsedStars} " +
-                $"varC={r.MedianVarC:F4} varG={r.MedianVarG:F4} kurt={r.MedianKurtosis:F4}");
+                $"varC={r.MedianVarC:F4} varG={r.MedianVarG:F4} kurt={r.MedianKurtosis:F4} " +
+                $"angle={r.MeasuredAngleDeg:F1}(x{r.AngleStrength:F2}) used={r.UsedAngleDeg:F1}");
         }
     }
 }

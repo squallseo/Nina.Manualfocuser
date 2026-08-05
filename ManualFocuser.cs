@@ -117,6 +117,19 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
+        /// <summary>
+        /// When set, the orientation measured from the image is used instead of
+        /// <see cref="SpikeAngle"/>. The measurement is taken and reported either way.
+        /// </summary>
+        public bool AutoSpikeAngle {
+            get => Properties.Settings.Default.AutoSpikeAngle;
+            set {
+                Properties.Settings.Default.AutoSpikeAngle = value;
+                Properties.Settings.Default.Save();
+                RaisePropertyChanged();
+            }
+        }
+
         public double SpikeAngle {
             get => Properties.Settings.Default.spikeAngleDeg;
             set {

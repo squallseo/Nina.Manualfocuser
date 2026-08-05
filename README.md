@@ -235,8 +235,45 @@ that puts best focus at 3684:
 
 With the angle set to 90° the metric minimum lands at 4015 — 325 steps from truth.
 The spider on that instrument actually sits at 43°/133°, and at 43° the minimum
-lands on 3690. `SpikeBatch` measures the true orientation from the image and prints
-it next to the configured value; check it before tuning anything else.
+lands on 3690.
+
+  Angle source          argmin   vertex   SNR
+  --------------------- -------- -------- ------
+  HFR (reference)       3690     3684     2.8
+  fixed 90°             4015     3896     3.3
+  fixed 133°            3690     3758     2.7
+  fixed 43°             3690     3762     4.1
+  auto-detected         3690     3760     10.3
+
+Auto detection wins by a wide margin, and not only because it picks the right axis:
+tracking the orientation per frame also removes the scatter that a slightly wrong
+fixed angle leaves behind.
+
+# 12. Automatic Spike Angle
+
+The orientation is measured on every frame by integrating background subtracted
+flux along rays through each tracked star, in both directions, over an annulus that
+excludes the core. The direction that collects the most flux is the spike axis. It
+is measured whether or not `Auto-detect angle` is enabled, and is shown on the plot
+so a configured value can be checked against reality.
+
+Two properties of the problem shape the implementation:
+
+- The result is only defined modulo 180°, and a four vane spider produces two axes
+  90° apart with similar strength. Without a tie-break the reported angle hops
+  between them frame to frame. Candidate peaks within 35° of the running estimate
+  win if they reach 75 % of the strongest peak.
+- The median is taken across stars within a frame, not across frames. Averaging
+  over time was implemented and measured worse: a focus sweep spans states where
+  the orientation is crisp and states where it is not, so a time window mixes good
+  estimates with bad ones rather than averaging repeats of one measurement.
+
+Known limitation: on heavily defocused frames the two spider axes are both smeared
+and the estimate wanders, and can migrate to the perpendicular axis over the course
+of a sweep. Near focus — where the curve minimum is actually determined — it is
+stable to within a few degrees. The reported strength (peak over mean of the
+directional profile) is the guard: below roughly 1.2 there is no usable spike and
+the measurement is discarded.
 
 ------------------------------------------------------------------------
 

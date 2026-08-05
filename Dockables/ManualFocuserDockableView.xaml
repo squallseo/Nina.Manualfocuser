@@ -204,8 +204,12 @@
                     </Grid>
                 </Grid>
             </StackPanel>
+            <!-- Plot plus a measured-spike-angle badge pinned to its top right corner.
+                 The angle is measured from every frame regardless of whether the
+                 metric is set to use it, so the configured value can be checked. -->
+            <Grid Grid.Row="1">
             <oxy:Plot
-                Grid.Row="1" Margin="0,0,0,0"
+                Margin="0,0,0,0"
                 Background="{StaticResource BackgroundBrush}"
                 PlotAreaBackground="{StaticResource BackgroundBrush}"
                 PlotAreaBorderColor="{Binding Path=Color, Source={StaticResource BorderBrush}}">
@@ -308,10 +312,27 @@
                         Color="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
                         Text="{Binding HFRDelta, StringFormat=F3}"
                         TextColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                        StartPoint="{Binding ArrowPoint[0]}" 
+                        StartPoint="{Binding ArrowPoint[0]}"
                         EndPoint="{Binding ArrowPoint[1]}"/>
                 </oxy:Plot.Annotations>
             </oxy:Plot>
+
+            <Border HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,6,12,0"
+                    Padding="6,2,6,2"
+                    CornerRadius="3"
+                    IsHitTestVisible="False"
+                    Background="{StaticResource BackgroundBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    Visibility="{Binding HasSpikeAngle, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+                <TextBlock FontSize="11"
+                           Foreground="{StaticResource NotificationWarningBrush}"
+                           Text="{Binding SpikeAngleText}"
+                           ToolTip="Spike orientation measured from the last frame.&#x0A;The multiplier is peak over mean of the directional profile;&#x0A;below about 1.2 there is no clear spike." />
+            </Border>
+            </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>

@@ -43,6 +43,8 @@ Options
   --limit <n>             only process the first n frames
   --seed-frame <n>        frame index used to seed the star list (default 0)
   --reseed                re-detect stars on every frame instead of tracking
+  --auto-angle            measure the spike orientation per frame and use it
+                          instead of --angle (it is measured and reported either way)
   --peak-sigma <v>        star detection threshold in sigma above background (default 40)
   --max-seed-stars <n>    candidates handed to the selector (default 400)
 
@@ -74,8 +76,8 @@ Example
             public string Name;
             public SpikeAnalysisParams Params;
             public SpikeTrackingState State;
-            public List<(int pos, double j, double varC, double varG, double kurt, int stars)> Points
-                = new List<(int, double, double, double, double, int)>();
+            public List<(int pos, double j, double varC, double varG, double kurt, int stars, double angle)> Points
+                = new List<(int, double, double, double, double, int, double)>();
         }
 
         private static int Run(string[] args) {
@@ -100,7 +102,8 @@ Example
                 bgRingFraction = opt.GetD("bg-ring", 0.7),
                 minStarSizePx = opt.GetD("min-star", 6),
                 maxStarS = (int)opt.GetD("max-stars", 5),
-                minUsedStarsForValidFrame = 1
+                minUsedStarsForValidFrame = 1,
+                autoSpikeAngle = opt.Flags.Contains("auto-angle")
             };
 
             var variants = BuildVariants(baseParams, opt.Sweep);
@@ -130,7 +133,7 @@ Example
             int maxSeedStars = (int)opt.GetD("max-seed-stars", 400);
 
             var csv = new StringBuilder();
-            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev");
+            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle");
 
             var hfrByPos = new List<(int pos, double hfr)>();
             var sw = Stopwatch.StartNew();
@@ -176,6 +179,8 @@ Example
                     }
                 }
 
+                bool firstEvaluated = processed == 0;
+
                 // ---- HFR reference over the tracked stars ----
                 double hfrAvg = double.NaN, hfrStd = 0;
                 var refState = variants[0].State;
@@ -207,10 +212,21 @@ Example
                        .Append(F(r.MedianVarG)).Append(',')
                        .Append(F(r.MedianKurtosis)).Append(',')
                        .Append(F(hfrAvg)).Append(',')
-                       .Append(F(hfrStd)).AppendLine();
+                       .Append(F(hfrStd)).Append(',')
+                       .Append(F(r.MeasuredAngleDeg)).Append(',')
+                       .Append(F(r.AngleStrength)).Append(',')
+                       .Append(F(r.UsedAngleDeg)).AppendLine();
 
                     if (r.IsValid)
-                        v.Points.Add((pos, r.Metric, r.MedianVarC, r.MedianVarG, r.MedianKurtosis, r.UsedStars));
+                        v.Points.Add((pos, r.Metric, r.MedianVarC, r.MedianVarG, r.MedianKurtosis, r.UsedStars, r.MeasuredAngleDeg));
+
+                    if (firstEvaluated && ReferenceEquals(v, variants[0])) {
+                        Console.WriteLine(r.HasAngleEstimate
+                            ? $"Spike angle : measured {r.MeasuredAngleDeg:F1}deg (x{r.AngleStrength:F2}) " +
+                              $"| metric using {r.UsedAngleDeg:F1}deg {(v.Params.autoSpikeAngle ? "(auto)" : "(configured)")}"
+                            : "Spike angle : no clear orientation on the seed frame");
+                        Console.WriteLine();
+                    }
                 }
 
                 processed++;
@@ -243,20 +259,6 @@ Example
 
             Console.WriteLine($"             -> {selected.TrackedStars.Count} used: " +
                 string.Join(", ", selected.TrackedStars.Select(t => $"({t.X:F0},{t.Y:F0}) {t.BaseSizePx}px")));
-
-            // spike orientation is a frequent source of confusion - measure it
-            var angles = new List<double>();
-            foreach (var t in selected.TrackedStars.Take(4)) {
-                var peaks = StarFinder.EstimateSpikeAngles(img.Data, img.Width, img.Height, t.X, t.Y, bg.Median);
-                foreach (var p in peaks.Where(p => p.strength > 1.15)) angles.Add(p.angleDeg);
-            }
-            if (angles.Count > 0) {
-                Console.WriteLine($"Spike angles: measured ~ {string.Join(", ", angles.Select(a => $"{a:F0}deg"))}" +
-                                  $"   (configured: {v.Params.spikeAngleDeg:F0}deg)");
-            } else {
-                Console.WriteLine("Spike angles: no clear spike orientation detected on the seed frame");
-            }
-            Console.WriteLine();
         }
 
         private static void PrintCurves(List<Variant> variants, List<(int pos, double hfr)> hfrByPos) {
@@ -273,7 +275,9 @@ Example
                                                   j: SpikeCore.Median(g.Select(x => x.j).ToList()),
                                                   varC: SpikeCore.Median(g.Select(x => x.varC).ToList()),
                                                   kurt: SpikeCore.Median(g.Select(x => x.kurt).ToList()),
-                                                  stars: (int)Math.Round(g.Average(x => x.stars))))
+                                                  stars: (int)Math.Round(g.Average(x => x.stars)),
+                                                  angle: SpikeCore.CircularMedianDeg(
+                                                      g.Select(x => x.angle).Where(a => !double.IsNaN(a)).ToList())))
                                     .ToList();
 
                 if (byPos.Count == 0) { Console.WriteLine($"\n[{v.Name}] no valid points"); continue; }
@@ -282,11 +286,12 @@ Example
                 double jMax = byPos.Max(p => p.j);
 
                 Console.WriteLine($"\n[{v.Name}]");
-                Console.WriteLine("   pos      HFR       J        varC     kurt   n   " + new string('-', 34));
+                Console.WriteLine("   pos      HFR       J        varC     kurt   ang  n   " + new string('-', 30));
                 foreach (var p in byPos) {
                     string hfrs = hfrMap.TryGetValue(p.pos, out var h) ? h.ToString("F2", Inv).PadLeft(7) : "      -";
-                    int bar = jMax > jMin ? (int)Math.Round(34 * (p.j - jMin) / (jMax - jMin)) : 0;
-                    Console.WriteLine($"  {p.pos,5}  {hfrs}  {p.j,8:F3} {p.varC,8:F3} {p.kurt,6:F2}  {p.stars,2}   {new string('#', Math.Max(0, bar))}");
+                    string ang = double.IsNaN(p.angle) ? "  -" : p.angle.ToString("F0", Inv).PadLeft(3);
+                    int bar = jMax > jMin ? (int)Math.Round(30 * (p.j - jMin) / (jMax - jMin)) : 0;
+                    Console.WriteLine($"  {p.pos,5}  {hfrs}  {p.j,8:F3} {p.varC,8:F3} {p.kurt,6:F2}  {ang}  {p.stars,2}   {new string('#', Math.Max(0, bar))}");
                 }
             }
         }
@@ -436,7 +441,7 @@ Example
                 => Values.TryGetValue(key, out var v) ? v : fallback;
         }
 
-        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed" };
+        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed", "auto-angle" };
 
         private static Options ParseOptions(string[] args) {
             var opt = new Options();

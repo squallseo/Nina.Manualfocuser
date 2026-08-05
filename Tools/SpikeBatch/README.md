@@ -32,6 +32,7 @@ dotnet run -c Release -- "C:\path\to\sweep" --angle 43
 | `--limit <n>` | process only the first n frames |
 | `--seed-frame <n>` | which frame seeds the star list (default 0) |
 | `--reseed` | re-detect stars every frame instead of tracking |
+| `--auto-angle` | measure the spike orientation per frame and use it instead of `--angle` |
 | `--peak-sigma <v>` | star detection threshold, sigma above background (default 40) |
 | `--angle <deg>` | spike angle |
 | `--tau <px>` | core sigma |
@@ -45,9 +46,11 @@ its own tracking state. Sweeping is therefore nearly free compared to re-running
 
 ## Reading the output
 
-The seed report measures the **actual** spike orientation from the image and prints
-it next to the configured angle. Getting this wrong silently ruins the metric, so
-check it first.
+The run prints the **actual** spike orientation measured from the first frame next
+to the angle the metric used. Getting this wrong silently ruins the metric, so check
+it first. The `ang` column in the curve table is the orientation measured on each
+frame; it should be steady near focus and is expected to wander on heavily
+defocused frames.
 
 The quality table reports, for each series:
 

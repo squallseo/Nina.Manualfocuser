@@ -40,6 +40,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double MinSpikeStep { get; set; }
         public double MinSpike { get; set; }
 
+        /// <summary>Spike orientation measured on the most recent frame, NaN if unknown.</summary>
+        public double MeasuredSpikeAngle { get; private set; } = double.NaN;
+        public double MeasuredSpikeAngleStrength { get; private set; }
+        public bool SpikeAngleIsAuto { get; private set; }
+
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<DataPoint> PlotFocusPoints { get; } = new AsyncObservableCollection<DataPoint>();
@@ -122,6 +127,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             MinHFR = 0.0;
             MinSpikeStep = 0.0;
             MinSpike = 0.0;
+            MeasuredSpikeAngle = double.NaN;
+            MeasuredSpikeAngleStrength = 0.0;
 
             // Star tracking must restart with the plot, otherwise a new run keeps
             // chasing stars seeded in the previous one.
@@ -282,6 +289,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 minStarSizePx = s.MinStarSizePx,
                 maxStarS = s.MaxStars,
                 spikeAngleDeg = s.spikeAngleDeg,
+                autoSpikeAngle = s.AutoSpikeAngle,
 
                 coreSigmaPx = s.CoreSigmaPx,
                 coreRejectSigmaPx = s.CoreRejectSigmaPx,
@@ -367,6 +375,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     try {
                         var spikeParam = BuildSpikeParams();
                         spikeResult = SpikeAnalyzer.Evaluate(imageData, spikeParam, analysisResult, ref trackingState);
+
+                        if (spikeResult.HasAngleEstimate) {
+                            MeasuredSpikeAngle = spikeResult.MeasuredAngleDeg;
+                            MeasuredSpikeAngleStrength = spikeResult.AngleStrength;
+                        }
+                        SpikeAngleIsAuto = spikeParam.autoSpikeAngle;
+
                         SpikeAnalyzer.LogFrame("frame", focuserPosition, spikeResult);
                         WriteDiagnosticsRow(focuserPosition, hfrAvg, hfrStdev, spikeResult);
                     } catch (Exception e) {
@@ -431,7 +446,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         diagPath = Path.Combine(dir, $"ManualFocuser-spike-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
                         File.AppendAllText(diagPath,
                             "utc,focuserPosition,hfr,hfrStdev,status,usedStars,J,spread,varC,varG,kurtosis," +
-                            "spikeAngleDeg,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing\n",
+                            "measuredAngle,angleStrength,usedAngle," +
+                            "spikeAngleDeg,autoAngle,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing\n",
                             Encoding.UTF8);
                     }
 
@@ -449,7 +465,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     sb.Append(r.MedianVarC.ToString("F6", inv)).Append(',');
                     sb.Append(r.MedianVarG.ToString("F6", inv)).Append(',');
                     sb.Append(r.MedianKurtosis.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MeasuredAngleDeg.ToString("F2", inv)).Append(',');
+                    sb.Append(r.AngleStrength.ToString("F3", inv)).Append(',');
+                    sb.Append(r.UsedAngleDeg.ToString("F2", inv)).Append(',');
                     sb.Append(s.spikeAngleDeg.ToString(inv)).Append(',');
+                    sb.Append(s.AutoSpikeAngle ? "1" : "0").Append(',');
                     sb.Append(s.CoreSigmaPx.ToString(inv)).Append(',');
                     sb.Append(s.CoreRejectSigmaPx.ToString(inv)).Append(',');
                     sb.Append(s.AxisSigmaPx.ToString(inv)).Append(',');

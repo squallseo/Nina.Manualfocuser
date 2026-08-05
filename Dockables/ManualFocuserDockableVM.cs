@@ -129,6 +129,24 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public double MinSpikeStep => this.DataModel.MinSpikeStep;
         public bool HasSpikePoints => this.DataModel.SpikeFocusPoints.Count > 0;
 
+        public bool HasSpikeAngle => !double.IsNaN(this.DataModel.MeasuredSpikeAngle);
+
+        /// <summary>
+        /// Measured spike orientation, shown on the plot whether or not auto mode is
+        /// on, so the configured angle can be sanity checked against reality. The
+        /// strength is the peak-over-mean of the directional profile; below roughly
+        /// 1.2 the frame has no clear spike and the number should not be trusted.
+        /// </summary>
+        public string SpikeAngleText {
+            get {
+                var m = this.DataModel;
+                if (double.IsNaN(m.MeasuredSpikeAngle)) return "spike angle: not detected";
+
+                string mode = m.SpikeAngleIsAuto ? "auto" : $"set {Properties.Settings.Default.spikeAngleDeg:F0}°";
+                return $"spike {m.MeasuredSpikeAngle:F1}°  (x{m.MeasuredSpikeAngleStrength:F2}, {mode})";
+            }
+        }
+
         public double StepDelta {
             get => this.DataModel.StepDelta;
             set {
@@ -445,6 +463,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             RaisePropertyChanged(nameof(MinSpike));
             RaisePropertyChanged(nameof(MinSpikeStep));
             RaisePropertyChanged(nameof(HasSpikePoints));
+            RaisePropertyChanged(nameof(HasSpikeAngle));
+            RaisePropertyChanged(nameof(SpikeAngleText));
         }
 
         /// <summary>

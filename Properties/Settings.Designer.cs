@@ -241,6 +241,18 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool AutoSpikeAngle {
+            get {
+                return ((bool)(this["AutoSpikeAngle"]));
+            }
+            set {
+                this["AutoSpikeAngle"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("True")]
         public bool EnableSpikeMetric {
             get {
