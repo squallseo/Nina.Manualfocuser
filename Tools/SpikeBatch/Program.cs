@@ -72,12 +72,17 @@ Example
         }
 
         // ==========================================================
+        private sealed class Point {
+            public int Pos;
+            public double J, VarC, Kurt, Angle, Sigma, Hfw, Fwhm, Sep, Dip, Snr, Hfr;
+            public int Stars;
+        }
+
         private sealed class Variant {
             public string Name;
             public SpikeAnalysisParams Params;
             public SpikeTrackingState State;
-            public List<(int pos, double j, double varC, double varG, double kurt, int stars, double angle)> Points
-                = new List<(int, double, double, double, double, int, double)>();
+            public List<Point> Points = new List<Point>();
         }
 
         private static int Run(string[] args) {
@@ -103,10 +108,18 @@ Example
                 minStarSizePx = opt.GetD("min-star", 6),
                 maxStarS = (int)opt.GetD("max-stars", 5),
                 minUsedStarsForValidFrame = 1,
-                autoSpikeAngle = opt.Flags.Contains("auto-angle")
+                autoSpikeAngle = opt.Flags.Contains("auto-angle"),
+                uMaxPx = opt.GetD("u-max", 40),
+                splitWeight = opt.GetD("split-weight", 1.0),
+                peakThresholdFraction = opt.GetD("peak-threshold", 0.35)
             };
 
-            var variants = BuildVariants(baseParams, opt.Sweep);
+            if (opt.Values.TryGetValue("metric", out var metricName))
+                baseParams.metricKind = ParseMetric(metricName);
+
+            var variants = opt.Flags.Contains("compare")
+                ? BuildComparisonVariants(baseParams)
+                : BuildVariants(baseParams, opt.Sweep);
 
             // ---- enumerate frames ----
             var files = Directory.GetFiles(folder, "*.fit*", SearchOption.TopDirectoryOnly)
@@ -131,6 +144,9 @@ Example
             int seedFrame = (int)opt.GetD("seed-frame", 0);
             double peakSigma = opt.GetD("peak-sigma", 40);
             int maxSeedStars = (int)opt.GetD("max-seed-stars", 400);
+
+            string dumpDir = opt.GetS("dump", null);
+            var dumps = new List<Diagnostics.FrameDump>();
 
             var csv = new StringBuilder();
             csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle");
@@ -217,8 +233,14 @@ Example
                        .Append(F(r.AngleStrength)).Append(',')
                        .Append(F(r.UsedAngleDeg)).AppendLine();
 
-                    if (r.IsValid)
-                        v.Points.Add((pos, r.Metric, r.MedianVarC, r.MedianVarG, r.MedianKurtosis, r.UsedStars, r.MeasuredAngleDeg));
+                    if (r.IsValid) {
+                        v.Points.Add(new Point {
+                            Pos = pos, J = r.Metric, VarC = r.MedianVarC, Kurt = r.MedianKurtosis,
+                            Angle = r.MeasuredAngleDeg, Sigma = r.MedianSigma, Hfw = r.MedianHfw,
+                            Fwhm = r.MedianFwhm, Sep = r.MedianSeparation, Dip = r.MedianDipDepth,
+                            Snr = r.MedianProfileSnr, Hfr = hfrAvg, Stars = r.UsedStars
+                        });
+                    }
 
                     if (firstEvaluated && ReferenceEquals(v, variants[0])) {
                         Console.WriteLine(r.HasAngleEstimate
@@ -227,6 +249,19 @@ Example
                             : "Spike angle : no clear orientation on the seed frame");
                         Console.WriteLine();
                     }
+                }
+
+                // Diagnostic dump uses the brightest tracked star and the angle the
+                // reference variant actually used on this frame.
+                if (dumpDir != null && refState?.TrackedStars != null && refState.TrackedStars.Count > 0) {
+                    var star = refState.TrackedStars[0];
+                    double dumpAngle = !double.IsNaN(refState.LastAngleDeg)
+                        ? refState.LastAngleDeg
+                        : variants[0].Params.spikeAngleDeg;
+
+                    var d = Diagnostics.Dump(dumpDir, img.Data, img.Width, img.Height, star,
+                                             variants[0].Params, dumpAngle, pos, hfrAvg, writeImages: true);
+                    if (d != null) dumps.Add(d);
                 }
 
                 processed++;
@@ -238,6 +273,12 @@ Example
 
             File.WriteAllText(outPath, csv.ToString(), Encoding.UTF8);
             Console.WriteLine($"CSV         : {outPath}");
+
+            if (dumps.Count > 0) {
+                Diagnostics.WriteProfileCsv(Path.Combine(dumpDir, "profiles.csv"), dumps);
+                Diagnostics.PrintProfiles(dumps);
+                Console.WriteLine($"\nDumped {dumps.Count} ROI crops and profiles to {dumpDir}");
+            }
 
             PrintCurves(variants, hfrByPos);
             PrintQuality(variants, hfrByPos);
@@ -269,31 +310,40 @@ Example
                                  .ToDictionary(g => g.Key, g => SpikeCore.Median(g.Select(x => x.hfr).ToList()));
 
             foreach (var v in variants) {
-                var byPos = v.Points.GroupBy(p => p.pos)
-                                    .OrderBy(g => g.Key)
-                                    .Select(g => (pos: g.Key,
-                                                  j: SpikeCore.Median(g.Select(x => x.j).ToList()),
-                                                  varC: SpikeCore.Median(g.Select(x => x.varC).ToList()),
-                                                  kurt: SpikeCore.Median(g.Select(x => x.kurt).ToList()),
-                                                  stars: (int)Math.Round(g.Average(x => x.stars)),
-                                                  angle: SpikeCore.CircularMedianDeg(
-                                                      g.Select(x => x.angle).Where(a => !double.IsNaN(a)).ToList())))
-                                    .ToList();
-
+                var byPos = Collapse(v.Points);
                 if (byPos.Count == 0) { Console.WriteLine($"\n[{v.Name}] no valid points"); continue; }
 
-                double jMin = byPos.Min(p => p.j);
-                double jMax = byPos.Max(p => p.j);
+                double jMin = byPos.Min(p => p.J);
+                double jMax = byPos.Max(p => p.J);
 
                 Console.WriteLine($"\n[{v.Name}]");
-                Console.WriteLine("   pos      HFR       J        varC     kurt   ang  n   " + new string('-', 30));
+                Console.WriteLine("   pos      HFR       J      sigma    hfw   fwhm    sep   dip   pSNR  ang  n  " + new string('-', 22));
                 foreach (var p in byPos) {
-                    string hfrs = hfrMap.TryGetValue(p.pos, out var h) ? h.ToString("F2", Inv).PadLeft(7) : "      -";
-                    string ang = double.IsNaN(p.angle) ? "  -" : p.angle.ToString("F0", Inv).PadLeft(3);
-                    int bar = jMax > jMin ? (int)Math.Round(30 * (p.j - jMin) / (jMax - jMin)) : 0;
-                    Console.WriteLine($"  {p.pos,5}  {hfrs}  {p.j,8:F3} {p.varC,8:F3} {p.kurt,6:F2}  {ang}  {p.stars,2}   {new string('#', Math.Max(0, bar))}");
+                    string hfrs = hfrMap.TryGetValue(p.Pos, out var h) ? h.ToString("F2", Inv).PadLeft(7) : "      -";
+                    string ang = double.IsNaN(p.Angle) ? "  -" : p.Angle.ToString("F0", Inv).PadLeft(3);
+                    int bar = jMax > jMin ? (int)Math.Round(22 * (p.J - jMin) / (jMax - jMin)) : 0;
+                    Console.WriteLine($"  {p.Pos,5}  {hfrs}  {p.J,7:F2} {p.Sigma,7:F2} {p.Hfw,6:F2} {p.Fwhm,6:F1} {p.Sep,6:F1} {p.Dip,5:F2} {p.Snr,6:F1}  {ang} {p.Stars,2}  {new string('#', Math.Max(0, bar))}");
                 }
             }
+        }
+
+        /// <summary>Collapses repeated visits to a focuser position into one row.</summary>
+        private static List<Point> Collapse(List<Point> points) {
+            return points.GroupBy(p => p.Pos).OrderBy(g => g.Key).Select(g => new Point {
+                Pos = g.Key,
+                J = SpikeCore.Median(g.Select(x => x.J).ToList()),
+                VarC = SpikeCore.Median(g.Select(x => x.VarC).ToList()),
+                Kurt = SpikeCore.Median(g.Select(x => x.Kurt).ToList()),
+                Sigma = SpikeCore.Median(g.Select(x => x.Sigma).ToList()),
+                Hfw = SpikeCore.Median(g.Select(x => x.Hfw).ToList()),
+                Fwhm = SpikeCore.Median(g.Select(x => x.Fwhm).ToList()),
+                Sep = SpikeCore.Median(g.Select(x => x.Sep).ToList()),
+                Dip = SpikeCore.Median(g.Select(x => x.Dip).ToList()),
+                Snr = SpikeCore.Median(g.Select(x => x.Snr).ToList()),
+                Hfr = SpikeCore.Median(g.Select(x => x.Hfr).Where(h => !double.IsNaN(h)).ToList()),
+                Stars = (int)Math.Round(g.Average(x => x.Stars)),
+                Angle = SpikeCore.CircularMedianDeg(g.Select(x => x.Angle).Where(a => !double.IsNaN(a)).ToList())
+            }).ToList();
         }
 
         // ==========================================================
@@ -309,9 +359,112 @@ Example
 
             Report("HFR (reference)", hfrByPos.Select(p => (p.pos, p.hfr)).ToList());
             foreach (var v in variants)
-                Report(v.Name, v.Points.Select(p => (p.pos, p.j)).ToList());
+                Report(v.Name, v.Points.Select(p => (p.Pos, p.J)).ToList());
 
             Console.WriteLine();
+            PrintAcceptance(variants, hfrByPos);
+        }
+
+        // ==========================================================
+        // Acceptance tests
+        //
+        // The four questions the metric has to answer, scored rather than eyeballed:
+        //   1. does it move with HFR at all
+        //   2. does it still move where HFR has gone flat - the whole point
+        //   3. does it see the spike split
+        //   4. does it fail visibly when the spike is gone
+        // ==========================================================
+        private static void PrintAcceptance(List<Variant> variants, List<(int pos, double hfr)> hfrByPos) {
+            var hfrCurve = hfrByPos.GroupBy(p => p.pos).OrderBy(g => g.Key)
+                                   .Select(g => (pos: g.Key, hfr: SpikeCore.Median(g.Select(x => x.hfr).ToList())))
+                                   .ToList();
+            if (hfrCurve.Count < 4) {
+                Console.WriteLine("=== acceptance: not enough HFR points ===");
+                return;
+            }
+
+            double hfrMin = hfrCurve.Min(c => c.hfr);
+            // "near focus" = where HFR has flattened out and stops discriminating
+            var nearPositions = hfrCurve.Where(c => c.hfr <= hfrMin * 1.5).Select(c => c.pos).ToHashSet();
+
+            Console.WriteLine("=== acceptance ===");
+            Console.WriteLine($"  near-focus band: HFR <= {hfrMin * 1.5:F2} ({nearPositions.Count} of {hfrCurve.Count} positions)");
+            Console.WriteLine();
+            Console.WriteLine($"  {"metric",-12} {"rho(HFR)",9} {"nearGain",9} {"splitOn",9} {"failFrac",9}");
+
+            var hfrPoints = hfrCurve.Select(c => new Point { Pos = c.pos, J = c.hfr, Hfr = c.hfr }).ToList();
+            ReportAcceptance("HFR (ref)", hfrPoints, hfrCurve, nearPositions);
+
+            foreach (var v in variants)
+                ReportAcceptance(v.Name, Collapse(v.Points), hfrCurve, nearPositions);
+
+            Console.WriteLine();
+            Console.WriteLine("  rho(HFR)  Spearman rank correlation against HFR over the whole sweep (want ~ +1)");
+            Console.WriteLine("  nearGain  near-focus contrast of this metric divided by HFR's (want > 1)");
+            Console.WriteLine("  splitOn   fraction of frames where a split was detected");
+            Console.WriteLine("  failFrac  fraction of frames with no usable profile (want failures, not guesses,");
+            Console.WriteLine("            on frames where the spike has washed out)");
+            Console.WriteLine();
+        }
+
+        private static void ReportAcceptance(string label, List<Point> curve, List<(int pos, double hfr)> hfrCurve, HashSet<int> near) {
+            if (curve.Count < 4) { Console.WriteLine($"  {label,-12} {"-",9} {"-",9} {"-",9} {"-",9}"); return; }
+
+            var hfrByPos = hfrCurve.ToDictionary(c => c.pos, c => c.hfr);
+            var paired = curve.Where(p => hfrByPos.ContainsKey(p.Pos)).ToList();
+
+            double rho = Spearman(paired.Select(p => p.J).ToList(), paired.Select(p => hfrByPos[p.Pos]).ToList());
+
+            // near-focus contrast, relative to HFR's own contrast over the same band
+            double nearGain = double.NaN;
+            var nearPts = paired.Where(p => near.Contains(p.Pos)).ToList();
+            if (nearPts.Count >= 3) {
+                double mContrast = RelativeSpread(nearPts.Select(p => p.J).ToList());
+                double hContrast = RelativeSpread(nearPts.Select(p => hfrByPos[p.Pos]).ToList());
+                if (hContrast > 0) nearGain = mContrast / hContrast;
+            }
+
+            double splitOn = curve.Count(p => p.Sep > 0) / (double)curve.Count;
+            double failFrac = curve.Count(p => double.IsNaN(p.Snr)) / (double)curve.Count;
+
+            Console.WriteLine($"  {label,-12} {Fmt(rho, "F3"),9} {Fmt(nearGain, "F2"),9} {splitOn,9:P0} {failFrac,9:P0}");
+        }
+
+        /// <summary>(max - min) / median. Scale free, so metrics in different units compare.</summary>
+        private static double RelativeSpread(List<double> values) {
+            var v = values.Where(x => !double.IsNaN(x)).ToList();
+            if (v.Count < 2) return 0;
+            double med = SpikeCore.Median(v);
+            if (Math.Abs(med) < 1e-12) return 0;
+            return (v.Max() - v.Min()) / Math.Abs(med);
+        }
+
+        private static double Spearman(List<double> a, List<double> b) {
+            if (a.Count != b.Count || a.Count < 3) return double.NaN;
+            var ra = Rank(a);
+            var rb = Rank(b);
+            double ma = ra.Average(), mb = rb.Average();
+            double num = 0, da = 0, db = 0;
+            for (int i = 0; i < ra.Length; i++) {
+                num += (ra[i] - ma) * (rb[i] - mb);
+                da += (ra[i] - ma) * (ra[i] - ma);
+                db += (rb[i] - mb) * (rb[i] - mb);
+            }
+            return da > 0 && db > 0 ? num / Math.Sqrt(da * db) : double.NaN;
+        }
+
+        private static double[] Rank(List<double> values) {
+            var idx = Enumerable.Range(0, values.Count).OrderBy(i => values[i]).ToArray();
+            var rank = new double[values.Count];
+            int j = 0;
+            while (j < idx.Length) {
+                int k = j;
+                while (k + 1 < idx.Length && values[idx[k + 1]] == values[idx[j]]) k++;
+                double avg = (j + k) / 2.0 + 1;
+                for (int m = j; m <= k; m++) rank[idx[m]] = avg;
+                j = k + 1;
+            }
+            return rank;
         }
 
         private static void Report(string label, List<(int pos, double val)> points) {
@@ -394,6 +547,24 @@ Example
         }
 
         // ==========================================================
+        private static SpikeMetricKind ParseMetric(string name) {
+            foreach (SpikeMetricKind k in Enum.GetValues(typeof(SpikeMetricKind)))
+                if (k.ToString().Equals(name, StringComparison.OrdinalIgnoreCase)) return k;
+            throw new ArgumentException($"Unknown metric '{name}'. Valid: {string.Join(", ", Enum.GetNames(typeof(SpikeMetricKind)))}");
+        }
+
+        /// <summary>One variant per metric kind, so every candidate is scored against
+        /// the same frames, the same stars and the same angle in a single pass.</summary>
+        private static List<Variant> BuildComparisonVariants(SpikeAnalysisParams baseParams) {
+            var list = new List<Variant>();
+            foreach (SpikeMetricKind k in Enum.GetValues(typeof(SpikeMetricKind))) {
+                var p = baseParams.Clone();
+                p.metricKind = k;
+                list.Add(new Variant { Name = k.ToString().ToLowerInvariant(), Params = p });
+            }
+            return list;
+        }
+
         private static List<Variant> BuildVariants(SpikeAnalysisParams baseParams, (string name, List<double> values)? sweep) {
             var list = new List<Variant>();
 
@@ -413,6 +584,10 @@ Example
 
         private static void Apply(SpikeAnalysisParams p, string name, double v) {
             switch (name) {
+                case "metric": p.metricKind = (SpikeMetricKind)(int)v; break;
+                case "u-max": p.uMaxPx = v; break;
+                case "split-weight": p.splitWeight = v; break;
+                case "peak-threshold": p.peakThresholdFraction = v; break;
                 case "angle": p.spikeAngleDeg = v; break;
                 case "tau": p.coreSigmaPx = v; break;
                 case "core-reject": p.coreRejectSigmaPx = v; break;
@@ -441,7 +616,7 @@ Example
                 => Values.TryGetValue(key, out var v) ? v : fallback;
         }
 
-        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed", "auto-angle" };
+        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed", "auto-angle", "compare" };
 
         private static Options ParseOptions(string[] args) {
             var opt = new Options();

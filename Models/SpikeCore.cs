@@ -4,6 +4,31 @@ using System.Linq;
 
 namespace Cwseo.NINA.ManualFocuser.Models {
 
+    /// <summary>
+    /// Which quantity the focus metric reports. Everything except Legacy is derived
+    /// from the same flux profile across the spike, so they can be compared against
+    /// each other on one pass over the data.
+    /// </summary>
+    public enum SpikeMetricKind {
+        /// <summary>betaVar*varC + betaSplit*(1/kurtosis)^p. The original formulation.</summary>
+        Legacy = 0,
+
+        /// <summary>RMS width of the profile, in pixels.</summary>
+        Sigma,
+
+        /// <summary>Flux weighted mean |u| - the one dimensional analogue of HFR, in pixels.</summary>
+        Hfw,
+
+        /// <summary>Full width at half maximum of the profile envelope, in pixels.</summary>
+        Fwhm,
+
+        /// <summary>Separation of the two outer peaks, zero while the spike is single.</summary>
+        Split,
+
+        /// <summary>Hfw + splitWeight * separation. Smooth near focus, sharper once split.</summary>
+        Hybrid
+    }
+
     // ========================================================
     // Parameters
     //
@@ -54,6 +79,26 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // Numeric stability for kurtosis
         public double kurtosisEps { get; set; } = 1e-6;
 
+        // ---- profile based metrics ----
+
+        public SpikeMetricKind metricKind { get; set; } = SpikeMetricKind.Legacy;
+
+        /// <summary>Half range of the u profile, in pixels. Must cover the split.</summary>
+        public double uMaxPx { get; set; } = 40.0;
+
+        /// <summary>
+        /// Fraction of the profile at each end treated as baseline. Clipping negative
+        /// residuals to zero leaves a positive noise pedestal that dominates any
+        /// moment taken over a wide u range, so it has to be removed explicitly.
+        /// </summary>
+        public double profileBaselineFraction { get; set; } = 0.15;
+
+        /// <summary>Weight of the split separation term in the hybrid metric.</summary>
+        public double splitWeight { get; set; } = 1.0;
+
+        /// <summary>A local maximum must reach this fraction of the peak to count.</summary>
+        public double peakThresholdFraction { get; set; } = 0.35;
+
         // Tracking / centroid refinement
         public bool enableCentroidTracking { get; set; } = true;
         public int centroidWindowPx { get; set; } = 17;        // odd recommended
@@ -93,6 +138,14 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
         /// <summary>Spike orientation measured on this star, or NaN.</summary>
         public double AngleDeg { get; set; } = double.NaN;
+
+        // Profile shape across the spike, all in pixels except DipDepth.
+        public double Sigma { get; set; } = double.NaN;
+        public double Hfw { get; set; } = double.NaN;
+        public double Fwhm { get; set; } = double.NaN;
+        public double Separation { get; set; } = double.NaN;
+        public double DipDepth { get; set; } = double.NaN;
+        public double ProfileSnr { get; set; } = double.NaN;
     }
 
     public sealed class TrackedStar {
@@ -144,6 +197,14 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double MedianVarC { get; init; } = double.NaN;
         public double MedianVarG { get; init; } = double.NaN;
         public double MedianKurtosis { get; init; } = double.NaN;
+
+        // Profile shape, computed for every metric kind so a frame stays diagnosable.
+        public double MedianSigma { get; init; } = double.NaN;
+        public double MedianHfw { get; init; } = double.NaN;
+        public double MedianFwhm { get; init; } = double.NaN;
+        public double MedianSeparation { get; init; } = double.NaN;
+        public double MedianDipDepth { get; init; } = double.NaN;
+        public double MedianProfileSnr { get; init; } = double.NaN;
 
         /// <summary>Spike orientation measured from this frame, or NaN.</summary>
         public double MeasuredAngleDeg { get; init; } = double.NaN;
@@ -326,28 +387,72 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             var varCs = new List<double>(work.Count);
             var varGs = new List<double>(work.Count);
             var kurts = new List<double>(work.Count);
+            var sigmas = new List<double>(work.Count);
+            var hfws = new List<double>(work.Count);
+            var fwhms = new List<double>(work.Count);
+            var seps = new List<double>(work.Count);
+            var dips = new List<double>(work.Count);
+            var snrs = new List<double>(work.Count);
             var perStar = new List<SpikeStarPoint>(work.Count);
 
-            foreach (var w in work) {
-                if (TryComputeSpikeMetric(w.Roi, w.Size, param, usedAngle, w.OffX, w.OffY, out SpikeTerms terms)) {
-                    metrics.Add(terms.J);
-                    varCs.Add(terms.VarC);
-                    varGs.Add(terms.VarG);
-                    kurts.Add(terms.Kurtosis);
+            int uMax = (int)Math.Round(Math.Clamp(param.uMaxPx, 6, 400));
 
-                    perStar.Add(new SpikeStarPoint {
-                        X = w.Star.X,
-                        Y = w.Star.Y,
-                        Metric = terms.J,
-                        VarC = terms.VarC,
-                        VarG = terms.VarG,
-                        Kurtosis = terms.Kurtosis,
-                        AngleDeg = w.AngleDeg,
-                        BoxSizePx = Math.Clamp((int)Math.Round(w.Star.BaseSizePx * 2.0), 12, 120)
-                    });
-                } else {
-                    w.Star.MissCount++;
+            foreach (var w in work) {
+                double j = double.NaN;
+                var point = new SpikeStarPoint {
+                    X = w.Star.X,
+                    Y = w.Star.Y,
+                    AngleDeg = w.AngleDeg,
+                    BoxSizePx = Math.Clamp((int)Math.Round(w.Star.BaseSizePx * 2.0), 12, 120)
+                };
+
+                // The profile terms are computed for every kind, not just the selected
+                // one: they cost one pass and they are what makes a bad frame
+                // diagnosable after the fact.
+                int uLimit = Math.Min(uMax, w.Size / 2 - 1);
+                var profile = BuildUProfile(w.Roi, w.Size, param, usedAngle, w.OffX, w.OffY, uLimit);
+                bool haveProfile = TryComputeProfileTerms(profile, param, out ProfileTerms pt);
+
+                if (haveProfile) {
+                    point.Sigma = pt.Sigma;
+                    point.Hfw = pt.Hfw;
+                    point.Fwhm = pt.Fwhm;
+                    point.Separation = pt.Separation;
+                    point.DipDepth = pt.DipDepth;
+                    point.ProfileSnr = pt.ProfileSnr;
                 }
+
+                if (param.metricKind == SpikeMetricKind.Legacy) {
+                    if (TryComputeSpikeMetric(w.Roi, w.Size, param, usedAngle, w.OffX, w.OffY, out SpikeTerms terms)) {
+                        j = terms.J;
+                        point.VarC = terms.VarC;
+                        point.VarG = terms.VarG;
+                        point.Kurtosis = terms.Kurtosis;
+                        varCs.Add(terms.VarC);
+                        varGs.Add(terms.VarG);
+                        kurts.Add(terms.Kurtosis);
+                    }
+                } else if (haveProfile) {
+                    j = SelectMetric(param.metricKind, pt, param);
+                }
+
+                if (double.IsNaN(j) || double.IsInfinity(j)) {
+                    w.Star.MissCount++;
+                    continue;
+                }
+
+                if (haveProfile) {
+                    sigmas.Add(pt.Sigma);
+                    hfws.Add(pt.Hfw);
+                    fwhms.Add(pt.Fwhm);
+                    seps.Add(pt.Separation);
+                    dips.Add(pt.DipDepth);
+                    snrs.Add(pt.ProfileSnr);
+                }
+
+                point.Metric = j;
+                metrics.Add(j);
+                perStar.Add(point);
             }
 
             state.FrameIndex++;
@@ -374,11 +479,300 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 MedianVarC = Median(varCs),
                 MedianVarG = Median(varGs),
                 MedianKurtosis = Median(kurts),
+                MedianSigma = Median(sigmas),
+                MedianHfw = Median(hfws),
+                MedianFwhm = Median(fwhms),
+                MedianSeparation = Median(seps),
+                MedianDipDepth = Median(dips),
+                MedianProfileSnr = Median(snrs),
                 MeasuredAngleDeg = measuredAngle,
                 AngleStrength = measuredStrength,
                 UsedAngleDeg = usedAngle,
                 StarPoints = perStar
             };
+        }
+
+        // ====================================================
+        // Profile based metrics
+        //
+        // Everything here works on p(u): flux projected onto the axis perpendicular
+        // to the spike, with the same s-window and core suppression the legacy path
+        // applies. Working from the profile rather than from raw pixel moments makes
+        // the quantities directly interpretable - every one of them is in pixels -
+        // and lets all candidates be computed from a single pass.
+        // ====================================================
+
+        public readonly struct ProfileTerms {
+            public ProfileTerms(double sigma, double hfw, double fwhm, double separation, double dipDepth, int peaks, double snr) {
+                Sigma = sigma; Hfw = hfw; Fwhm = fwhm; Separation = separation;
+                DipDepth = dipDepth; PeakCount = peaks; ProfileSnr = snr;
+            }
+
+            /// <summary>RMS width of p(u), px.</summary>
+            public double Sigma { get; }
+
+            /// <summary>Flux weighted mean |u - mean|, px. The 1D analogue of HFR.</summary>
+            public double Hfw { get; }
+
+            /// <summary>Full width at half maximum of the envelope, px.</summary>
+            public double Fwhm { get; }
+
+            /// <summary>Distance between the outermost peaks, px. Zero while unimodal.</summary>
+            public double Separation { get; }
+
+            /// <summary>1 - p(centre)/p(peak). Zero when single, approaches 1 when fully split.</summary>
+            public double DipDepth { get; }
+
+            public int PeakCount { get; }
+
+            /// <summary>Peak over baseline scatter. Below a few, the profile is noise.</summary>
+            public double ProfileSnr { get; }
+        }
+
+        /// <summary>
+        /// Builds p(u) on a one pixel grid. The grid spacing matters: with a spike near
+        /// 0 or 90 degrees, u lands on integers, and any bin width that is not a
+        /// divisor of one pixel leaves every other bin empty.
+        /// </summary>
+        public static double[] BuildUProfile(
+            float[] roi, int size,
+            SpikeAnalysisParams param,
+            double angleDeg,
+            double offX, double offY,
+            int uMax) {
+
+            int bins = 2 * uMax + 1;
+            var sum = new double[bins];
+            var count = new double[bins];
+
+            double centerX = size / 2.0 + offX;
+            double centerY = size / 2.0 + offY;
+
+            double theta = angleDeg * Math.PI / 180.0;
+            double cosT = Math.Cos(theta);
+            double sinT = Math.Sin(theta);
+
+            double r0 = Math.Max(0.5, param.coreRejectSigmaPx);
+            double inv2r02 = 1.0 / (2.0 * r0 * r0);
+            double sSigma = Math.Max(1.0, param.axisSigmaPx);
+            double inv2sSig2 = 1.0 / (2.0 * sSigma * sSigma);
+            double sReject = Math.Max(0.5, param.axisRejectSigmaPx);
+            double inv2sRej2 = 1.0 / (2.0 * sReject * sReject);
+
+            for (int y = 0; y < size; y++) {
+                double dy = y - centerY;
+                int row = y * size;
+                for (int x = 0; x < size; x++) {
+                    double I = roi[row + x];
+
+                    double dx = x - centerX;
+                    double u = -dx * sinT + dy * cosT;
+
+                    int bin = (int)Math.Round(u) + uMax;
+                    if (bin < 0 || bin >= bins) continue;
+
+                    double s = dx * cosT + dy * sinT;
+                    double r2 = dx * dx + dy * dy;
+
+                    double wCore = 1.0 - Math.Exp(-r2 * inv2r02);
+                    double wAxis = Math.Exp(-s * s * inv2sSig2) * (1.0 - Math.Exp(-s * s * inv2sRej2));
+                    double w = wCore * wAxis;
+                    if (w <= 0) continue;
+
+                    // Negative residuals are kept here on purpose; they cancel the
+                    // positive noise excursions instead of biasing the profile up.
+                    sum[bin] += I * w;
+                    count[bin] += w;
+                }
+            }
+
+            var profile = new double[bins];
+            for (int i = 0; i < bins; i++)
+                profile[i] = count[i] > 0 ? sum[i] / count[i] : 0;
+            return profile;
+        }
+
+        public static bool TryComputeProfileTerms(double[] profile, SpikeAnalysisParams param, out ProfileTerms terms) {
+            terms = default;
+            if (profile == null || profile.Length < 9) return false;
+
+            int bins = profile.Length;
+            int uMax = (bins - 1) / 2;
+
+            // --- baseline from the wings ---
+            int edge = Math.Max(2, (int)Math.Round(bins * Math.Clamp(param.profileBaselineFraction, 0.02, 0.4)));
+            var wing = new List<double>(edge * 2);
+            for (int i = 0; i < edge; i++) { wing.Add(profile[i]); wing.Add(profile[bins - 1 - i]); }
+
+            double baseline = Median(wing);
+            double noise = MAD(wing) * 1.4826;
+            if (noise <= 0) noise = 1e-6;
+
+            var p = new double[bins];
+            double peak = 0;
+            for (int i = 0; i < bins; i++) {
+                p[i] = Math.Max(0, profile[i] - baseline);
+                if (p[i] > peak) peak = p[i];
+            }
+            if (peak <= 0) return false;
+
+            double snr = peak / noise;
+
+            double w = 0, wu = 0;
+            for (int i = 0; i < bins; i++) { w += p[i]; wu += p[i] * (i - uMax); }
+            if (w <= 0) return false;
+            double mean = wu / w;
+
+            double m2 = 0, m1 = 0;
+            for (int i = 0; i < bins; i++) {
+                double d = (i - uMax) - mean;
+                m2 += p[i] * d * d;
+                m1 += p[i] * Math.Abs(d);
+            }
+            double sigma = Math.Sqrt(m2 / w);
+            double hfw = m1 / w;
+
+            // --- smoothed copy for shape features ---
+            var sm = new double[bins];
+            for (int i = 0; i < bins; i++) {
+                double s = 0; int n = 0;
+                for (int k = -1; k <= 1; k++) {
+                    int j = i + k;
+                    if (j < 0 || j >= bins) continue;
+                    s += p[j]; n++;
+                }
+                sm[i] = s / n;
+            }
+            double smPeak = sm.Max();
+            if (smPeak <= 0) return false;
+
+            // --- FWHM of the envelope: outermost half maximum crossings ---
+            double half = smPeak * 0.5;
+            int lo = 0, hi = bins - 1;
+            while (lo < bins && sm[lo] < half) lo++;
+            while (hi >= 0 && sm[hi] < half) hi--;
+            double fwhm = hi > lo ? hi - lo + 1 : 1;
+
+            // --- peaks and the dip between them ---
+            double peakThreshold = smPeak * Math.Clamp(param.peakThresholdFraction, 0.05, 0.95);
+            var peaks = new List<int>();
+            for (int i = 1; i < bins - 1; i++) {
+                if (sm[i] < peakThreshold) continue;
+                if (sm[i] >= sm[i - 1] && sm[i] > sm[i + 1]) peaks.Add(i);
+            }
+
+            double separation = 0;
+            double dip = 0;
+            if (peaks.Count >= 2) {
+                int first = peaks[0], last = peaks[peaks.Count - 1];
+                separation = last - first;
+
+                double valley = double.MaxValue;
+                for (int i = first; i <= last; i++) valley = Math.Min(valley, sm[i]);
+                double outer = Math.Min(sm[first], sm[last]);
+                if (outer > 0) dip = Math.Clamp(1.0 - valley / outer, 0, 1);
+            }
+
+            terms = new ProfileTerms(sigma, hfw, fwhm, separation, dip, peaks.Count, snr);
+            return true;
+        }
+
+        public static double SelectMetric(SpikeMetricKind kind, in ProfileTerms t, SpikeAnalysisParams param) {
+            switch (kind) {
+                case SpikeMetricKind.Sigma: return t.Sigma;
+                case SpikeMetricKind.Hfw: return t.Hfw;
+                case SpikeMetricKind.Fwhm: return t.Fwhm;
+                case SpikeMetricKind.Split: return t.Separation;
+                case SpikeMetricKind.Hybrid: return t.Hfw + param.splitWeight * t.Separation;
+                default: return double.NaN;
+            }
+        }
+
+        // ====================================================
+        // Diagnostics
+        //
+        // Exposed so the offline evaluator can look at exactly the pixels the
+        // metric sees, rather than at a re-implementation of the extraction.
+        // ====================================================
+        public static bool TryGetDiagnosticRoi(
+            ushort[] data, int width, int height,
+            double x, double y, int baseSizePx,
+            SpikeAnalysisParams param,
+            out float[] roi, out int size, out double offX, out double offY) {
+
+            offX = 0;
+            offY = 0;
+            param ??= new SpikeAnalysisParams();
+
+            if (!TryExtractROIAt(data, width, height, x, y, baseSizePx, param, out roi, out size, out _, out _))
+                return false;
+
+            RemoveBackground(roi, size, param);
+
+            if (param.enableCentroidTracking && TryRefineCentroid(roi, size, param, out double dx, out double dy)) {
+                offX = dx;
+                offY = dy;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Flux projected onto the u axis (perpendicular to the spike), using the same
+        /// s-window and core suppression the metric applies. This is the curve whose
+        /// shape the whole formulation is trying to summarise.
+        /// </summary>
+        public static double[] ComputeUProfile(
+            float[] roi, int size,
+            SpikeAnalysisParams param,
+            double angleDeg,
+            double offX, double offY,
+            double uMax, int bins) {
+
+            var profile = new double[bins];
+            var counts = new double[bins];
+
+            double centerX = size / 2.0 + offX;
+            double centerY = size / 2.0 + offY;
+
+            double theta = angleDeg * Math.PI / 180.0;
+            double cosT = Math.Cos(theta);
+            double sinT = Math.Sin(theta);
+
+            double r0 = Math.Max(0.5, param.coreRejectSigmaPx);
+            double inv2r02 = 1.0 / (2.0 * r0 * r0);
+            double sSigma = Math.Max(1.0, param.axisSigmaPx);
+            double inv2sSig2 = 1.0 / (2.0 * sSigma * sSigma);
+            double sReject = Math.Max(0.5, param.axisRejectSigmaPx);
+            double inv2sRej2 = 1.0 / (2.0 * sReject * sReject);
+
+            for (int y = 0; y < size; y++) {
+                double dy = y - centerY;
+                int row = y * size;
+                for (int x = 0; x < size; x++) {
+                    double I = roi[row + x];
+                    if (I <= 0) continue;
+
+                    double dx = x - centerX;
+                    double s = dx * cosT + dy * sinT;
+                    double u = -dx * sinT + dy * cosT;
+                    if (u < -uMax || u > uMax) continue;
+
+                    double r2 = dx * dx + dy * dy;
+                    double wCore = 1.0 - Math.Exp(-r2 * inv2r02);
+                    double wAxis = Math.Exp(-s * s * inv2sSig2) * (1.0 - Math.Exp(-s * s * inv2sRej2));
+
+                    int bin = (int)((u + uMax) / (2.0 * uMax) * bins);
+                    if (bin < 0 || bin >= bins) continue;
+
+                    profile[bin] += I * wCore * wAxis;
+                    counts[bin] += 1;
+                }
+            }
+
+            for (int i = 0; i < bins; i++)
+                if (counts[i] > 0) profile[i] /= counts[i];
+
+            return profile;
         }
 
         // ====================================================
