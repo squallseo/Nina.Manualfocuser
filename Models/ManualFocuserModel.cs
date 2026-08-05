@@ -1,52 +1,53 @@
-﻿using NINA.Core.Enum;
+using NINA.Core.Enum;
 using NINA.Core.Interfaces;
 using NINA.Core.Model;
 using NINA.Core.Model.Equipment;
 using NINA.Core.Utility;
-using NINA.Equipment.Equipment.MyFocuser;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Model;
 using NINA.Image.ImageAnalysis;
 using NINA.Image.Interfaces;
-using NINA.Profile;
 using NINA.Profile.Interfaces;
-using NINA.WPF.Base.Mediator;
 using NINA.WPF.Base.ViewModel.AutoFocus;
 using OxyPlot;
 using OxyPlot.Series;
-using OxyPlot.Wpf;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics.Metrics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace Cwseo.NINA.ManualFocuser.Models {
     public class ManualFocuserModel {
-        private IProfileService profileService;
-        private IImagingMediator imagingMediator;
-        private ICameraMediator cameraMediator;
-        private IPluggableBehaviorSelector<IStarDetection> starDetectionSelector;
-        private IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector;
-        SpikeTrackingState trackingState = null;
+        private readonly IProfileService profileService;
+        private readonly IImagingMediator imagingMediator;
+        private readonly ICameraMediator cameraMediator;
+        private readonly IPluggableBehaviorSelector<IStarDetection> starDetectionSelector;
+        private readonly IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector;
+
+        private SpikeTrackingState trackingState = null;
+
         public double HFRDelta { get; set; }
         public double StepDelta { get; set; }
         public double MinStep { get; set; }
         public double MinHFR { get; set; }
+
+        // Spike minimum, tracked separately - J is a different quantity from HFR
+        // and its minimum is the thing an autofocus run would eventually search for.
+        public double MinSpikeStep { get; set; }
+        public double MinSpike { get; set; }
 
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<DataPoint> PlotFocusPoints { get; } = new AsyncObservableCollection<DataPoint>();
         public AsyncObservableCollection<DataPoint> ArrowPoint { get; } = new AsyncObservableCollection<DataPoint>();
 
-        public ManualFocuserModel(IProfileService profileService, 
-            IImagingMediator imagingMediator, 
-            ICameraMediator cameraMediator, 
+        public ManualFocuserModel(IProfileService profileService,
+            IImagingMediator imagingMediator,
+            ICameraMediator cameraMediator,
             IPluggableBehaviorSelector<IStarDetection> starDetectionSelector,
             IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector) {
             this.profileService = profileService;
@@ -56,11 +57,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             this.starAnnotatorSelector = starAnnotatorSelector;
             ResetPlotData();
         }
+
         public int GetFocusPointSize() {
-            return HFRFocusPoints.Count();
+            return HFRFocusPoints.Count;
         }
+
         public void AddHFRPoint(int position, MeasureAndError measurement) {
-            var idx = HFRFocusPoints.Count();
+            var idx = HFRFocusPoints.Count;
 
             var step = Convert.ToDouble(position);
             var hfr = measurement.Measure;
@@ -82,15 +85,31 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             HFRFocusPoints.Add(new ScatterErrorPoint(step, hfr, 0, errorY));
             PlotFocusPoints.Add(new DataPoint(step, hfr));
 
-            if(idx > 0) {
+            if (idx > 0) {
                 ArrowPoint[0] = PlotFocusPoints[idx - 1];
                 ArrowPoint[1] = PlotFocusPoints[idx];
             }
         }
 
+        /// <summary>
+        /// Adds a spike point. Invalid frames carry NaN and are dropped rather than
+        /// plotted - a sentinel value on the axis wrecks the scale and hides the curve.
+        /// </summary>
         public void AddSpikePoint(int position, MeasureAndError measurement) {
+            if (double.IsNaN(measurement.Measure) || double.IsInfinity(measurement.Measure)) {
+                Logger.Debug($"[ManualFocuser] Skipping invalid spike point at position {position}");
+                return;
+            }
+
             var step = Convert.ToDouble(position);
-            SpikeFocusPoints.Add(new ScatterErrorPoint(step, measurement.Measure, 0, measurement.Stdev));
+            var stdev = double.IsNaN(measurement.Stdev) ? 0 : measurement.Stdev;
+
+            if (SpikeFocusPoints.Count == 0 || measurement.Measure < MinSpike) {
+                MinSpikeStep = step;
+                MinSpike = measurement.Measure;
+            }
+
+            SpikeFocusPoints.Add(new ScatterErrorPoint(step, measurement.Measure, 0, stdev));
         }
 
         public void ResetPlotData() {
@@ -101,49 +120,87 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             StepDelta = 0.0;
             MinStep = 0.0;
             MinHFR = 0.0;
+            MinSpikeStep = 0.0;
+            MinSpike = 0.0;
+
+            // Star tracking must restart with the plot, otherwise a new run keeps
+            // chasing stars seeded in the previous one.
+            trackingState = null;
 
             ArrowPoint.Clear();
             ArrowPoint.Add(new DataPoint(0, 0));
             ArrowPoint.Add(new DataPoint(0, 0));
         }
 
+        /// <summary>
+        /// Captures and evaluates <paramref name="exposuresPerFocusPoint"/> frames.
+        /// Evaluation is sequential on purpose: the spike tracking state is shared
+        /// mutable state, and overlapping evaluations corrupt it.
+        /// </summary>
+        public async Task<(MeasureAndError hfr, MeasureAndError spike)> GetAverageMeasurement(
+            FilterInfo filter,
+            int exposuresPerFocusPoint,
+            int focuserPosition,
+            CancellationToken token,
+            IProgress<ApplicationStatus> progress) {
 
+            int frames = Math.Max(1, exposuresPerFocusPoint);
+            var measures = new List<(MeasureAndError hfr, MeasureAndError spike)>(frames);
 
-        public async Task<Task<(MeasureAndError, MeasureAndError)>> GetAverageMeasurementTask(FilterInfo filter, int exposuresPerFocusPoint, CancellationToken token, IProgress<ApplicationStatus> progress) {
-            List<Task<(MeasureAndError, MeasureAndError)>> measurements = new List<Task<(MeasureAndError, MeasureAndError)>>();
-
-            for (int i = 0; i < exposuresPerFocusPoint; i++) {
-                var image = await TakeExposure(filter, token, progress);
-
-                measurements.Add(EvaluateExposure(image, token, progress));
-
+            for (int i = 0; i < frames; i++) {
                 token.ThrowIfCancellationRequested();
+
+                var image = await TakeExposure(filter, token, progress);
+                if (image == null) {
+                    Logger.Warning("[ManualFocuser] Exposure returned no image - skipping frame");
+                    continue;
+                }
+
+                measures.Add(await EvaluateExposure(image, focuserPosition, token, progress));
             }
 
-            return EvaluateAllExposures(measurements, exposuresPerFocusPoint, token);
-        }
+            if (measures.Count == 0) {
+                return (new MeasureAndError { Measure = 0, Stdev = 1000 },
+                        new MeasureAndError { Measure = double.NaN, Stdev = 0 });
+            }
 
-        private async Task<(MeasureAndError, MeasureAndError)> EvaluateAllExposures(List<Task<(MeasureAndError, MeasureAndError)>> measureTasks, int exposuresPerFocusPoint, CancellationToken token) {
-            var measures = await Task.WhenAll(measureTasks);
-
-            //Average HFR  of multiple exposures (if configured this way)
             double sumMeasure = 0;
             double sumVariances = 0;
-            double sumVariancesSpike = 0;
             var spikeValues = new List<double>();
-            foreach (var partialMeasurement in measures) {
-                (MeasureAndError hfr, MeasureAndError spike) = partialMeasurement;
+            var spikeVariances = new List<double>();
+
+            foreach (var (hfr, spike) in measures) {
                 sumMeasure += hfr.Measure;
                 sumVariances += hfr.Stdev * hfr.Stdev;
-                sumVariancesSpike += spike.Stdev * spike.Stdev;
-                spikeValues.Add(spike.Measure);
+
+                if (!double.IsNaN(spike.Measure)) {
+                    spikeValues.Add(spike.Measure);
+                    spikeVariances.Add(spike.Stdev * spike.Stdev);
+                }
             }
-            return (new MeasureAndError() { Measure = sumMeasure / exposuresPerFocusPoint, Stdev = Math.Sqrt(sumVariances / exposuresPerFocusPoint) }, new MeasureAndError() { Measure = SpikeAnalyzer.Median(spikeValues), Stdev = Math.Sqrt(sumVariancesSpike / exposuresPerFocusPoint) });
+
+            var hfrResult = new MeasureAndError {
+                Measure = sumMeasure / measures.Count,
+                Stdev = Math.Sqrt(sumVariances / measures.Count)
+            };
+
+            var spikeResult = spikeValues.Count == 0
+                ? new MeasureAndError { Measure = double.NaN, Stdev = 0 }
+                : new MeasureAndError {
+                    Measure = SpikeCore.Median(spikeValues),
+                    // Combine the per-frame star scatter with the frame-to-frame scatter
+                    // so the error bar means something when multiple frames are averaged.
+                    Stdev = Math.Sqrt(spikeVariances.Average() + Math.Pow(SpikeCore.StdDevSample(spikeValues), 2))
+                };
+
+            return (hfrResult, spikeResult);
         }
+
         private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress) {
             IExposureData image;
             var retries = 0;
             do {
+                token.ThrowIfCancellationRequested();
                 Logger.Trace("Starting Exposure for manual focus");
                 double expTime = profileService.ActiveProfile.FocuserSettings.AutoFocusExposureTime;
                 if (filter != null && filter.AutoFocusExposureTime > -1) {
@@ -173,6 +230,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 try {
                     image = await imagingMediator.CaptureImage(seq, token, progress);
+                } catch (OperationCanceledException) {
+                    throw;
                 } catch (Exception e) {
                     if (!IsSubSampleEnabled()) {
                         throw;
@@ -215,7 +274,34 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return null;
         }
 
-        private async Task<(MeasureAndError hfr, MeasureAndError spike)> EvaluateExposure(IExposureData exposureData, CancellationToken token, IProgress<ApplicationStatus> progress) {
+        public static SpikeAnalysisParams BuildSpikeParams() {
+            var s = Properties.Settings.Default;
+            return new SpikeAnalysisParams {
+                roiScale = s.RoiScale,
+                bgRingFraction = s.BgRingFraction,
+                minStarSizePx = s.MinStarSizePx,
+                maxStarS = s.MaxStars,
+                spikeAngleDeg = s.spikeAngleDeg,
+
+                coreSigmaPx = s.CoreSigmaPx,
+                coreRejectSigmaPx = s.CoreRejectSigmaPx,
+                axisSigmaPx = s.AxisSigmaPx,
+                axisRejectSigmaPx = s.AxisRejectSigmaPx,
+
+                betaVar = s.BetaVar,
+                betaSplit = s.BetaSplit,
+                splitPower = s.SplitPower,
+
+                minUsedStarsForValidFrame = s.MinUsedStars
+            };
+        }
+
+        private async Task<(MeasureAndError hfr, MeasureAndError spike)> EvaluateExposure(
+            IExposureData exposureData,
+            int focuserPosition,
+            CancellationToken token,
+            IProgress<ApplicationStatus> progress) {
+
             Logger.Trace("Evaluating Exposure");
 
             var imageData = await exposureData.ToImageData(progress, token);
@@ -232,7 +318,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             //Very simple to directly provide result if we use statistics based contrast detection
             if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION && profileService.ActiveProfile.FocuserSettings.ContrastDetectionMethod == ContrastDetectionMethodEnum.Statistics) {
-                return (new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 }, new MeasureAndError() { Measure = 0, Stdev = 0}  );
+                return (new MeasureAndError() { Measure = 100 * imageStatistics.StDev / imageStatistics.Mean, Stdev = 0.01 },
+                        new MeasureAndError() { Measure = double.NaN, Stdev = 0 });
             }
 
             System.Windows.Media.PixelFormat pixelFormat;
@@ -266,18 +353,31 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         analysisParams.OuterCropRatio = profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio;
                     }
                 }
-                var spikeParam = new SpikeAnalysisParams() { 
-                    roiScale = Properties.Settings.Default.RoiScale,
-                    //coreCutFraction = Properties.Settings.Default.CoreCutFraction,
-                    bgRingFraction = Properties.Settings.Default.BgRingFraction,
-                    minStarSizePx = Properties.Settings.Default.MinStarSizePx,
-                    //saturationLevel = Properties.Settings.Default.SaturationLevel,
-                    maxStarS = Properties.Settings.Default.MaxStars,
-                    spikeAngleDeg = Properties.Settings.Default.spikeAngleDeg
-                };
+
                 var starDetection = starDetectionSelector.GetBehavior();
                 var analysisResult = await starDetection.Detect(image, pixelFormat, analysisParams, progress, token);
-                var spikeOut = SpikeAnalyzer.TryCalculateSpikeMetricAuto(imageData, spikeParam, analysisResult, ref trackingState);
+
+                // Read the host's HFR BEFORE anything else touches the result object.
+                double hfrAvg = analysisResult.AverageHFR;
+                double hfrStdev = double.IsNaN(analysisResult.HFRStdDev) ? 0 : analysisResult.HFRStdDev;
+
+                // Spike analysis is read-only with respect to analysisResult.
+                var spikeResult = SpikeFrameResult.Failed(SpikeStatus.Disabled);
+                if (Properties.Settings.Default.EnableSpikeMetric) {
+                    try {
+                        var spikeParam = BuildSpikeParams();
+                        spikeResult = SpikeAnalyzer.Evaluate(imageData, spikeParam, analysisResult, ref trackingState);
+                        SpikeAnalyzer.LogFrame("frame", focuserPosition, spikeResult);
+                        WriteDiagnosticsRow(focuserPosition, hfrAvg, hfrStdev, spikeResult);
+                    } catch (Exception e) {
+                        // A failure in the experimental metric must never take down a
+                        // focus run, let alone the host application.
+                        Logger.Error("[ManualFocuser] Spike metric failed", e);
+                        spikeResult = SpikeFrameResult.Failed(SpikeStatus.NoValidStars);
+                    }
+                }
+
+                // Hand the untouched, detector-owned result back to N.I.N.A.
                 image.UpdateAnalysis(analysisParams, analysisResult);
 
                 if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
@@ -287,8 +387,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     imagingMediator.SetImage(annotatedImage);
                 }
 
-                var stdev = double.IsNaN(analysisResult.HFRStdDev) ? 0 : analysisResult.HFRStdDev;
-                return (new MeasureAndError() { Measure = analysisResult.AverageHFR, Stdev = stdev }, spikeOut.Spike);
+                return (new MeasureAndError() { Measure = hfrAvg, Stdev = hfrStdev },
+                        new MeasureAndError() { Measure = spikeResult.Metric, Stdev = spikeResult.Spread });
             } else {
                 var analysis = new ContrastDetection();
                 var analysisParams = new ContrastDetectionParams() {
@@ -303,9 +403,67 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 var analysisResult = await analysis.Measure(image, analysisParams, progress, token);
 
                 var stdev = double.IsNaN(analysisResult.ContrastStdev) ? 0 : analysisResult.ContrastStdev;
-                MeasureAndError ContrastMeasurement = new MeasureAndError() { Measure = analysisResult.AverageContrast, Stdev = stdev };
-                MeasureAndError dummyspike = new MeasureAndError() { Measure = 0, Stdev = 0 };
-                return (ContrastMeasurement, dummyspike);
+                return (new MeasureAndError() { Measure = analysisResult.AverageContrast, Stdev = stdev },
+                        new MeasureAndError() { Measure = double.NaN, Stdev = 0 });
+            }
+        }
+
+        // ====================================================
+        // Diagnostics CSV
+        //
+        // J alone cannot tell you why a point jumped. Logging the
+        // individual terms turns a night of observing into a tuning
+        // dataset that can be replayed offline.
+        // ====================================================
+        private static readonly object diagLock = new object();
+        private string diagPath;
+
+        private void WriteDiagnosticsRow(int focuserPosition, double hfr, double hfrStdev, SpikeFrameResult r) {
+            if (!Properties.Settings.Default.WriteSpikeDiagnostics) return;
+
+            try {
+                lock (diagLock) {
+                    if (diagPath == null) {
+                        var dir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "NINA", "Logs");
+                        Directory.CreateDirectory(dir);
+                        diagPath = Path.Combine(dir, $"ManualFocuser-spike-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+                        File.AppendAllText(diagPath,
+                            "utc,focuserPosition,hfr,hfrStdev,status,usedStars,J,spread,varC,varG,kurtosis," +
+                            "spikeAngleDeg,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing\n",
+                            Encoding.UTF8);
+                    }
+
+                    var s = Properties.Settings.Default;
+                    var inv = CultureInfo.InvariantCulture;
+                    var sb = new StringBuilder();
+                    sb.Append(DateTime.UtcNow.ToString("o", inv)).Append(',');
+                    sb.Append(focuserPosition.ToString(inv)).Append(',');
+                    sb.Append(hfr.ToString("F4", inv)).Append(',');
+                    sb.Append(hfrStdev.ToString("F4", inv)).Append(',');
+                    sb.Append(r.Status).Append(',');
+                    sb.Append(r.UsedStars.ToString(inv)).Append(',');
+                    sb.Append(r.Metric.ToString("F6", inv)).Append(',');
+                    sb.Append(r.Spread.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianVarC.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianVarG.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianKurtosis.ToString("F6", inv)).Append(',');
+                    sb.Append(s.spikeAngleDeg.ToString(inv)).Append(',');
+                    sb.Append(s.CoreSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(s.CoreRejectSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(s.AxisSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(s.AxisRejectSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(s.BetaVar.ToString(inv)).Append(',');
+                    sb.Append(s.BetaSplit.ToString(inv)).Append(',');
+                    sb.Append(s.SplitPower.ToString(inv)).Append(',');
+                    sb.Append(s.RoiScale.ToString(inv)).Append(',');
+                    sb.Append(s.BgRingFraction.ToString(inv)).Append('\n');
+
+                    File.AppendAllText(diagPath, sb.ToString(), Encoding.UTF8);
+                }
+            } catch (Exception e) {
+                Logger.Debug($"[ManualFocuser] Could not write spike diagnostics: {e.Message}");
             }
         }
     }

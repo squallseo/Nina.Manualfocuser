@@ -25,7 +25,9 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="5,0,5,0" IsEnabled="{Binding TelescopeInfo.TrackingEnabled}">
+        <!-- Tracking state is shown in the header rather than used to disable the whole
+             panel: gating on it makes the plugin untestable indoors with a simulator. -->
+        <Grid Margin="5,0,5,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="auto" />
                 <RowDefinition/>
@@ -95,6 +97,15 @@
                         <TextBlock Text="," />
                         <TextBlock Margin="5,0,0,0" Text="{Binding HFRDelta, StringFormat=F3}" FontWeight="Bold"/>
                         <TextBlock Text=")" />
+                        <!-- Spike minimum, tracked independently of HFR -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding HasSpikePoints, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+                            <TextBlock Margin="10,0,0,0" Text="MIN (Position, J) = (" Foreground="{StaticResource NotificationWarningBrush}"/>
+                            <TextBlock Text="{Binding MinSpikeStep}" Foreground="{StaticResource NotificationWarningBrush}"/>
+                            <TextBlock Text="," Foreground="{StaticResource NotificationWarningBrush}"/>
+                            <TextBlock Margin="5,0,0,0" Text="{Binding MinSpike, StringFormat=F3}" Foreground="{StaticResource NotificationWarningBrush}"/>
+                            <TextBlock Text=")" Foreground="{StaticResource NotificationWarningBrush}"/>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
                 <!-- GO/IN/OUT -->

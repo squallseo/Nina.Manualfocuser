@@ -1,163 +1,181 @@
-﻿<ResourceDictionary
+<ResourceDictionary
     x:Class="Cwseo.NINA.ManualFocuser.Options"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <DataTemplate x:Key="Manual Focuser_Options">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="6" HorizontalAlignment="Left">
+            <StackPanel Margin="6" HorizontalAlignment="Left" MinWidth="320">
 
                 <!-- Header -->
-                <StackPanel Grid.Row="1" Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal">
                     <Path
-                    Width="25"
-                    Margin="5"
-                    Data="{StaticResource ExclamationCircledSVG}"
-                    Fill="{StaticResource ButtonForegroundBrush}"
-                    Stretch="Uniform" />
-                    <TextBlock VerticalAlignment="Center">
-                        <TextBlock.Text>
-                            Spkie Analysis Parameter
-                        </TextBlock.Text>
-                    </TextBlock>
+                        Width="25"
+                        Margin="5"
+                        Data="{StaticResource ExclamationCircledSVG}"
+                        Fill="{StaticResource ButtonForegroundBrush}"
+                        Stretch="Uniform" />
+                    <TextBlock VerticalAlignment="Center" Text="Spike Analysis Parameters" FontWeight="Bold" />
                 </StackPanel>
+
+                <TextBlock Margin="5,0,0,6"
+                           FontSize="10"
+                           Foreground="{StaticResource SecondaryBrush}"
+                           TextWrapping="Wrap"
+                           MaxWidth="320"
+                           Text="Experimental focus metric for reflectors with diffraction spikes. It is measured alongside HFR and never replaces it." />
 
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="80" />
                     </Grid.ColumnDefinitions>
 
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- ROI Scale -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="ROI Scale"
-                        Grid.Row="0"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 1.8 – 2.4&#x0A;Near focus → lower, narrowband → higher" />
+                    <!-- Enable -->
+                    <TextBlock Grid.Row="0" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Enable spike metric"
+                               ToolTip="Turn off to skip spike analysis entirely. HFR keeps working." />
+                    <CheckBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
+                              IsChecked="{Binding EnableSpikeMetric}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="0"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding RoiScale, StringFormat=F2}" />
+                    <!-- Diagnostics -->
+                    <TextBlock Grid.Row="1" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Write diagnostics CSV"
+                               ToolTip="Writes position, J, varC, varG, kurtosis and the parameter set to&#x0A;%LOCALAPPDATA%\NINA\Logs\ManualFocuser-spike-*.csv" />
+                    <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
+                              IsChecked="{Binding WriteSpikeDiagnostics}" />
 
-                    <!-- Core Cut Fraction -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="Core Cut"
-                        Grid.Row="1"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 0.12 – 0.20&#x0A;Controls spike core exclusion" />
+                    <!-- Spike angle -->
+                    <TextBlock Grid.Row="2" Margin="0,6,6,2" VerticalAlignment="Center" FontSize="11" FontWeight="Bold"
+                               Text="Spike Angle (deg)"
+                               ToolTip="Orientation of the spider vane pair to analyse.&#x0A;Analysis runs perpendicular to this direction." />
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding SpikeAngle, StringFormat=F1}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="1"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding CoreCutFraction, StringFormat=F2}" />
+                    <!-- Section: geometry -->
+                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,2" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource SecondaryBrush}" Text="WINDOWS / GEOMETRY" />
 
-                    <!-- Background Ring -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="BG Ring"
-                        Grid.Row="2"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 0.68 – 0.75&#x0A;Background estimation radius" />
+                    <TextBlock Grid.Row="4" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="ROI Scale"
+                               ToolTip="ROI half size = star size x this.&#x0A;Keep the ROI larger than Axis Sigma or the axis window is truncated." />
+                    <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding RoiScale, StringFormat=F2}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="2"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding BgRingFraction, StringFormat=F2}" />
+                    <TextBlock Grid.Row="5" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="BG Ring"
+                               ToolTip="Recommended: 0.68 - 0.75&#x0A;Radius fraction where the background median is sampled." />
+                    <TextBox Grid.Row="5" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding BgRingFraction, StringFormat=F2}" />
 
-                    <!-- Min Star Size -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="Min Star (px)"
-                        Grid.Row="3"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 6 – 7 px&#x0A;Seeing dependent" />
+                    <TextBlock Grid.Row="6" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Core Sigma (tau)"
+                               ToolTip="Local u-window sigma. varC saturates at tau^2, so a small tau&#x0A;makes the variance term carry almost no information.&#x0A;Try 4 - 8 px to give it range." />
+                    <TextBox Grid.Row="6" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding CoreSigmaPx, StringFormat=F2}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="3"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding MinStarSizePx, StringFormat=F0}" />
+                    <TextBlock Grid.Row="7" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Core Reject (r0)"
+                               ToolTip="Recommended: 4 - 8 px&#x0A;Radial suppression of the saturated stellar core." />
+                    <TextBox Grid.Row="7" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding CoreRejectSigmaPx, StringFormat=F2}" />
 
-                    <!-- Saturation -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="Saturation"
-                        Grid.Row="4"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 0.92 – 0.94&#x0A;Fraction of full well" />
+                    <TextBlock Grid.Row="8" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Axis Sigma"
+                               ToolTip="Recommended: 20 - 40 px&#x0A;Extent along the spike that is analysed." />
+                    <TextBox Grid.Row="8" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding AxisSigmaPx, StringFormat=F2}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="4"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding SaturationLevel, StringFormat=F3}" />
+                    <TextBlock Grid.Row="9" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Axis Reject"
+                               ToolTip="Recommended: 6 - 12 px&#x0A;Rejects the centre region along the spike axis." />
+                    <TextBox Grid.Row="9" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding AxisRejectSigmaPx, StringFormat=F2}" />
 
-                    <!-- Max Stars -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="Max Stars"
-                        Grid.Row="5"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="Recommended: 4 – 6&#x0A;Lower for clusters, higher for galaxies" />
+                    <!-- Section: weights -->
+                    <TextBlock Grid.Row="10" Grid.ColumnSpan="2" Margin="0,8,0,2" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource SecondaryBrush}" Text="METRIC WEIGHTS" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="5"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding MaxStars, StringFormat=F0}" />
+                    <TextBlock Grid.Row="11" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Beta Var"
+                               ToolTip="Weight of the local variance term (pixel^2)." />
+                    <TextBox Grid.Row="11" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding BetaVar, StringFormat=F2}" />
 
-                    <!-- spikeAngleDeg -->
-                    <TextBlock Margin="0,2,6,2"
-                        Text="Spike Angle"
-                        Grid.Row="6"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        ToolTip="degree" />
+                    <TextBlock Grid.Row="12" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Beta Split"
+                               ToolTip="Recommended: 3 - 6&#x0A;Weight of the split penalty. Note the penalty is bounded by 1,&#x0A;since kurtosis is always >= 1." />
+                    <TextBox Grid.Row="12" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding BetaSplit, StringFormat=F2}" />
 
-                    <TextBox Margin="0,2,0,2"
-                        Grid.Row="6"
-                        Grid.Column="1"
-                        Height="22"
-                        FontSize="11"
-                        HorizontalContentAlignment="Right"
-                        VerticalContentAlignment="Center"
-                        Text="{Binding SpikeAngle, StringFormat=F1}" />
-                    
+                    <TextBlock Grid.Row="13" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Split Power (p)"
+                               ToolTip="Recommended: 2.0&#x0A;Sharpens the drop at the split-to-single transition." />
+                    <TextBox Grid.Row="13" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding SplitPower, StringFormat=F2}" />
+
+                    <!-- Section: star selection -->
+                    <TextBlock Grid.Row="14" Grid.ColumnSpan="2" Margin="0,8,0,2" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource SecondaryBrush}" Text="STAR SELECTION" />
+
+                    <TextBlock Grid.Row="15" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Min Star (px)"
+                               ToolTip="Recommended: 6 - 7 px&#x0A;Seeing dependent." />
+                    <TextBox Grid.Row="15" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding MinStarSizePx, StringFormat=F0}" />
+
+                    <TextBlock Grid.Row="16" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Max Stars"
+                               ToolTip="Recommended: 4 - 6&#x0A;Lower for clusters, higher for galaxies." />
+                    <TextBox Grid.Row="16" Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding MaxStars, StringFormat=F0}" />
                 </Grid>
+
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="80" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
+                               Text="Min Used Stars"
+                               ToolTip="A frame is only accepted when at least this many stars produced a metric." />
+                    <TextBox Grid.Column="1" Margin="0,2,0,2" Height="22" FontSize="11"
+                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                             Text="{Binding MinUsedStars, StringFormat=F0}" />
+                </Grid>
+
             </StackPanel>
         </ScrollViewer>
     </DataTemplate>
