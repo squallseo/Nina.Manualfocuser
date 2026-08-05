@@ -32,6 +32,17 @@ The metric is designed to:
 This version removes auxiliary structural penalties (lambda term) to
 keep the formulation minimal and stable.
 
+**Status.** Sections 1 – 10 are the original design. Sections 11 – 14 record what
+measurement has since shown, including where the design intent and the data
+disagree, and describe the profile based formulation that replaced the pixel
+moment one. Read section 11.1 first: it says which of the two development
+datasets a given number came from, and one of them turned out to have no
+diffraction spikes at all.
+
+The central claim — that a spike based metric stays sensitive near focus where
+HFR flattens out — is **still unverified**. See section 13.1 for the sweep needed
+to settle it.
+
 ------------------------------------------------------------------------
 
 # 1. Coordinate System
@@ -170,6 +181,20 @@ Window parameters:
     axisSigmaPx = 20 ~ 40
     coreSigmaPx (τ) = 1.0 ~ 2.0
 
+Note on τ: see section 11.3. Values in this range pin σ_c² at τ², which is
+almost certainly not what was intended.
+
+Profile parameters (section 12):
+
+    metricKind = Legacy
+    uMaxPx = 40                  must be wide enough to contain the split
+    profileBaselineFraction = 0.15
+    peakThresholdFraction = 0.35
+    splitWeight = 1.0
+
+Keep the ROI comfortably larger than axisSigmaPx, or the axis window is
+truncated by the ROI edge and stops doing anything.
+
 ------------------------------------------------------------------------
 
 # 9. Expected Behavior (design intent)
@@ -194,86 +219,160 @@ Window parameters:
 
 # 11. Measured Behaviour
 
-The offline evaluator in `Tools/SpikeBatch` replays a recorded focus sweep through
-the same metric code. Measured on a 34 frame sweep (e-130D newtonian, ATR2600M,
-positions 4215 → 3515 in steps of 25, HFR minimum at 3690):
+`Tools/SpikeBatch` replays recorded FITS frames through the same metric code the
+plugin runs, and can dump the star ROI as a log stretched PNG plus the flux
+profile across the spike.
 
-## 11.1 σ_c² saturates at τ²
+## 11.1 Know which dataset a number came from
 
-`σ_c²` is a gaussian-weighted second moment with width τ. When the underlying
-u-distribution is wider than τ the ratio converges to exactly τ², so with the
-default `coreSigmaPx = 1.5` the term is pinned near 2.25 over the entire sweep
-(measured range 1.58 – 2.45). It does not behave as "High on heavy defocus" as
-section 9 assumes — it is close to constant, and most of its remaining variation
-is noise.
+Two focus datasets were used while developing this, and only one of them is
+valid for a spike based metric.
 
-## 11.2 κ rises with defocus, not with merging
+  Dataset                                  Spikes visible   Usable
+  ---------------------------------------- ---------------- --------
+  e-130D / ATR2600M, 34 frame sweep        no               no
+  FDK200 / QHY600M, 4 frames               yes              partly
 
-Section 9 assumes κ is large when the spike is merged and small while it is still
-split. The measurement shows the opposite: κ ≈ 3.2 at best focus and rises to 6 – 9
-when heavily defocused.
+The 34 frame sweep has no diffraction spikes at any stretch. At best focus the
+star is a bare dot; at full defocus it is a plain donut from the central
+obstruction. Anything measured on it describes blob and donut shape, not spike
+behaviour. An earlier revision of this document quoted focus-estimate and
+angle-detection results from that sweep; they have been removed rather than
+corrected, because the quantity they measured was never the intended one.
 
-Consequently `P_split = (1/(κ+ε))^p` is **largest at best focus**, and adding it to
-J pushes J *up* exactly where J should be lowest. Isolating the term
-(`--beta-var 0`) produces a clean, smooth, unimodal curve whose *maximum* sits on
-best focus — it is the best behaved signal in the formulation, but it currently
-enters J with the wrong sign.
+Checking the ROI dump before trusting a result is not optional:
 
-## 11.3 Focus estimate quality
+    dotnet run -c Release -- "<folder>" --dump out/ --roi-scale 3.5
 
-Parabola vertex fitted over the lowest 60 % of each curve, against an HFR reference
-that puts best focus at 3684:
+## 11.2 What the spike actually does (FDK200 / QHY600M)
 
-  Formulation                              Vertex   Error
-  ---------------------------------------- -------- --------
-  HFR (reference)                          3684     -
-  J = σ_c² + 4·P_split  (as specified)     3762     +78
-  J = σ_c² − 4·P_split                     3719     +35
-  J = −P_split alone                       3697     +13
+This telescope shows a clean four vane pattern. Across increasing defocus the
+profile perpendicular to the spike goes from a single narrow peak, to a wide
+one, to clearly bimodal — the two-lines-merging-into-one behaviour this metric
+was started from.
 
-## 11.4 Spike angle matters more than any weight
+  FOCPOS    HFR     sigma   hfw    fwhm   separation   dip depth
+  --------- ------- ------- ------ ------ ------------ ----------
+  99222     6.75    8.44    5.61   9      0            0.00
+  100000    10.11   8.43    5.59   10     0            0.00
+  110000    13.83   7.98    6.55   21     12           0.28
+  120000    17.18   12.45   10.92  36     22           0.51
 
-With the angle set to 90° the metric minimum lands at 4015 — 325 steps from truth.
-The spider on that instrument actually sits at 43°/133°, and at 43° the minimum
-lands on 3690.
+The orientation estimator reports 89.9° at strength ×1.97 against a configured
+90°, which is the first confirmation on real spike data that angle detection
+works.
 
-  Angle source          argmin   vertex   SNR
-  --------------------- -------- -------- ------
-  HFR (reference)       3690     3684     2.8
-  fixed 90°             4015     3896     3.3
-  fixed 133°            3690     3758     2.7
-  fixed 43°             3690     3762     4.1
-  auto-detected         3690     3760     10.3
+Caveat: all four frames sit on one side of focus and the closest is still well
+defocused at HFR 6.75. Nothing here says anything about behaviour near focus.
 
-Auto detection wins by a wide margin, and not only because it picks the right axis:
-tracking the orientation per frame also removes the scatter that a slightly wrong
-fixed angle leaves behind.
+## 11.3 σ_c² saturates at τ²
 
-# 12. Automatic Spike Angle
+This one is analytic rather than measured. `σ_c²` is a gaussian-weighted second
+moment of width τ; when the underlying u-distribution is wider than τ the ratio
+converges to exactly τ². With the default `coreSigmaPx = 1.5` the term is
+therefore pinned near 2.25 whenever the star is at all spread out, and cannot
+behave as "high on heavy defocus" the way section 9 assumes.
+
+------------------------------------------------------------------------
+
+# 12. Profile Based Formulation
+
+The original formulation accumulates weighted moments over ROI pixels. The
+current one builds `p(u)` — flux projected onto the axis perpendicular to the
+spike, using the same s-window and core suppression — and derives everything
+from it. Every quantity is then in pixels, directly interpretable, and all
+candidates can be scored from one pass over the data.
+
+  Kind      Definition
+  --------- ---------------------------------------------------------
+  Legacy    β_var·σ_c² + β_split·(1/κ)^p, unchanged
+  Sigma     RMS width of p(u)
+  Hfw       flux weighted mean |u − mean|, the 1D analogue of HFR
+  Fwhm      full width at half maximum of the envelope
+  Split     separation of the outer peaks, zero while single
+  Hybrid    Hfw + splitWeight · Separation
+
+Two details the profile needs to be correct at all:
+
+- Bins must be one pixel. With a spike near 0° or 90°, u lands on integers, so
+  any bin width that is not a divisor of one pixel leaves every other bin empty.
+- The baseline must be estimated from the profile wings and subtracted. Clipping
+  negative background residuals to zero leaves a positive pedestal that dominates
+  any moment taken over a wide u range.
+
+Legacy remains the default. Nothing is switched over on the evidence available.
+
+------------------------------------------------------------------------
+
+# 13. Acceptance Tests
+
+`--compare` scores every candidate against the same frames, stars and angle, and
+`SpikeBatch` reports four numbers rather than leaving the judgement to the eye:
+
+  Name       Question
+  ---------- ---------------------------------------------------------
+  rho(HFR)   does it move with HFR at all (Spearman, want ≈ +1)
+  nearGain   does it still move where HFR has gone flat (want > 1)
+  splitOn    fraction of frames where a split was detected
+  failFrac   fraction that fail outright rather than guessing
+
+Measured on the four FDK200 frames:
+
+  metric    rho(HFR)   note
+  --------- ---------- --------------------------------------------
+  fwhm      1.000      9 → 10 → 21 → 36 px, widest dynamic range
+  legacy    1.000      2.02 → 2.59, correct direction, tiny range
+  split     0.949      0 until the spike splits, then tracks it
+  hfw       0.800
+  hybrid    0.800
+  sigma     0.200      non-monotonic, drop it
+
+## 13.1 Open question
+
+`nearGain` cannot be computed from any dataset here, because none of them cover
+the region near focus. That test is the entire justification for the project —
+HFR flattens into a quadratic minimum near focus while a split separation should
+fall roughly linearly to zero, giving a sharper vertex — and it remains
+unverified.
+
+Settling it needs a through-focus sweep from an instrument that shows spikes:
+
+- both sides of focus, best focus near the middle
+- out to roughly twice the minimum HFR at each end
+- closely spaced near focus, which is the region under test
+- two or three positions revisited, for a repeatability figure
+- exposure long enough that the spikes are visible in the ROI dump
+
+Then:
+
+    dotnet run -c Release -- "<folder>" --auto-angle --compare --roi-scale 3.5 --u-max 60
+
+------------------------------------------------------------------------
+
+# 14. Automatic Spike Angle
 
 The orientation is measured on every frame by integrating background subtracted
-flux along rays through each tracked star, in both directions, over an annulus that
-excludes the core. The direction that collects the most flux is the spike axis. It
-is measured whether or not `Auto-detect angle` is enabled, and is shown on the plot
-so a configured value can be checked against reality.
+flux along rays through each tracked star, in both directions, over an annulus
+that excludes the core. The direction collecting the most flux is the spike axis.
+It is measured whether or not auto mode is enabled, and shown on the Manual
+Focuser panel, so a typed value can be checked against reality.
 
 Two properties of the problem shape the implementation:
 
-- The result is only defined modulo 180°, and a four vane spider produces two axes
-  90° apart with similar strength. Without a tie-break the reported angle hops
-  between them frame to frame. Candidate peaks within 35° of the running estimate
-  win if they reach 75 % of the strongest peak.
+- The result is only defined modulo 180°, and a four vane spider produces two
+  axes 90° apart with similar strength. Without a tie-break the reported angle
+  hops between them frame to frame. Candidate peaks within 35° of the running
+  estimate win if they reach 75 % of the strongest peak.
 - The median is taken across stars within a frame, not across frames. Averaging
-  over time was implemented and measured worse: a focus sweep spans states where
-  the orientation is crisp and states where it is not, so a time window mixes good
+  over time was implemented and measured worse: a sweep spans states where the
+  orientation is crisp and states where it is not, so a time window mixes good
   estimates with bad ones rather than averaging repeats of one measurement.
 
-Known limitation: on heavily defocused frames the two spider axes are both smeared
-and the estimate wanders, and can migrate to the perpendicular axis over the course
-of a sweep. Near focus — where the curve minimum is actually determined — it is
-stable to within a few degrees. The reported strength (peak over mean of the
-directional profile) is the guard: below roughly 1.2 there is no usable spike and
-the measurement is discarded.
+The reported strength — peak over mean of the directional profile — is the guard.
+Below roughly 1.2 there is no usable spike and the measurement is discarded. On a
+dataset with no spikes at all the estimator still returns an angle, driven by
+whatever asymmetry the blob happens to have, which is why the strength figure and
+the ROI dump both matter before trusting it.
 
 ------------------------------------------------------------------------
 
