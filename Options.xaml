@@ -67,20 +67,12 @@
                     <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
                               IsChecked="{Binding WriteSpikeDiagnostics}" />
 
-                    <!-- Spike angle -->
-                    <TextBlock Grid.Row="2" Margin="0,6,6,2" VerticalAlignment="Center" FontSize="11" FontWeight="Bold"
-                               Text="Spike Angle (deg)"
-                               ToolTip="Orientation of the spider vane pair to analyse.&#x0A;Analysis runs perpendicular to this direction.&#x0A;Ignored while Auto-detect is ticked." />
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,2" Height="22" FontSize="11"
-                             HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
-                             IsEnabled="{Binding AutoSpikeAngle, Converter={StaticResource InverseBooleanConverter}}"
-                             Text="{Binding SpikeAngle, StringFormat=F1}" />
-
-                    <TextBlock Grid.Row="3" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
-                               Text="Auto-detect angle"
-                               ToolTip="Measure the spike orientation from every frame and use it.&#x0A;The measured value is shown on the plot either way, so you can&#x0A;check it before trusting it." />
-                    <CheckBox Grid.Row="3" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
-                              IsChecked="{Binding AutoSpikeAngle}" />
+                    <!-- Spike angle and Auto live on the Imaging tab panel, next to the
+                         measured value they need to be checked against. -->
+                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,6,0,2" FontSize="10"
+                               TextWrapping="Wrap" MaxWidth="320"
+                               Foreground="{StaticResource SecondaryBrush}"
+                               Text="Spike angle and auto-detection are on the Manual Focuser panel in the Imaging tab." />
 
                     <!-- Section: geometry -->
                     <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,2" FontSize="10" FontWeight="Bold"

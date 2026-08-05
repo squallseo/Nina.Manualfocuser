@@ -203,13 +203,44 @@
                         </ninactrl:CancellableButton>
                     </Grid>
                 </Grid>
+
+                <!-- Spike angle. A wrong angle damages the metric more than any other
+                     parameter, and it changes whenever the camera is rotated, so it is
+                     driven from here rather than from the plugin options tab. -->
+                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,5,0" VerticalAlignment="Center"
+                            Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+
+                    <TextBlock Text="Spike Angle" VerticalAlignment="Center" Margin="0,0,5,0"
+                               Foreground="{StaticResource NotificationWarningBrush}"/>
+                    <TextBox Width="55"
+                             VerticalContentAlignment="Center"
+                             HorizontalContentAlignment="Right"
+                             ToolTip="Orientation of the spider vane pair to analyse, in degrees.&#x0A;Analysis runs perpendicular to this direction."
+                             IsEnabled="{Binding AutoSpikeAngle, Converter={StaticResource InverseBooleanConverter}}"
+                             Text="{Binding SpikeAngle, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
+                    <TextBlock Text="°" VerticalAlignment="Center" Margin="2,0,0,0"/>
+
+                    <TextBlock Text="Auto" VerticalAlignment="Center" Margin="12,0,5,0"
+                               ToolTip="Use the orientation measured from each frame instead of the value on the left."/>
+                    <CheckBox VerticalAlignment="Center" IsChecked="{Binding AutoSpikeAngle}"/>
+
+                    <TextBlock Text="measured" VerticalAlignment="Center" Margin="15,0,5,0"
+                               Foreground="{StaticResource SecondaryBrush}"/>
+                    <TextBlock VerticalAlignment="Center"
+                               Text="{Binding MeasuredAngleText}"
+                               Foreground="{StaticResource NotificationWarningBrush}"
+                               ToolTip="Orientation measured from the last frame, whether or not Auto is on.&#x0A;The multiplier is peak over mean of the directional profile;&#x0A;below about 1.2 there is no clear spike."/>
+
+                    <Button Margin="10,0,0,0"
+                            MinWidth="45"
+                            Padding="6,0,6,0"
+                            Content="Use"
+                            ToolTip="Copy the measured angle into the box on the left and switch Auto off."
+                            Command="{Binding UseMeasuredAngleCommand}"/>
+                </StackPanel>
             </StackPanel>
-            <!-- Plot plus a measured-spike-angle badge pinned to its top right corner.
-                 The angle is measured from every frame regardless of whether the
-                 metric is set to use it, so the configured value can be checked. -->
-            <Grid Grid.Row="1">
             <oxy:Plot
-                Margin="0,0,0,0"
+                Grid.Row="1" Margin="0,0,0,0"
                 Background="{StaticResource BackgroundBrush}"
                 PlotAreaBackground="{StaticResource BackgroundBrush}"
                 PlotAreaBorderColor="{Binding Path=Color, Source={StaticResource BorderBrush}}">
@@ -316,23 +347,6 @@
                         EndPoint="{Binding ArrowPoint[1]}"/>
                 </oxy:Plot.Annotations>
             </oxy:Plot>
-
-            <Border HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Margin="0,6,12,0"
-                    Padding="6,2,6,2"
-                    CornerRadius="3"
-                    IsHitTestVisible="False"
-                    Background="{StaticResource BackgroundBrush}"
-                    BorderThickness="1"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    Visibility="{Binding HasSpikeAngle, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                <TextBlock FontSize="11"
-                           Foreground="{StaticResource NotificationWarningBrush}"
-                           Text="{Binding SpikeAngleText}"
-                           ToolTip="Spike orientation measured from the last frame.&#x0A;The multiplier is peak over mean of the directional profile;&#x0A;below about 1.2 there is no clear spike." />
-            </Border>
-            </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>

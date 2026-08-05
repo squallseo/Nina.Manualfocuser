@@ -131,19 +131,43 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
         public bool HasSpikeAngle => !double.IsNaN(this.DataModel.MeasuredSpikeAngle);
 
+        public bool IsSpikeMetricEnabled => Properties.Settings.Default.EnableSpikeMetric;
+
         /// <summary>
-        /// Measured spike orientation, shown on the plot whether or not auto mode is
-        /// on, so the configured angle can be sanity checked against reality. The
-        /// strength is the peak-over-mean of the directional profile; below roughly
+        /// The angle is the parameter a wrong value hurts most, so it lives on the
+        /// panel rather than behind the options tab.
+        /// </summary>
+        public double SpikeAngle {
+            get => Properties.Settings.Default.spikeAngleDeg;
+            set {
+                Properties.Settings.Default.spikeAngleDeg = double.IsNaN(value) ? 0 : Math.Clamp(value, -360.0, 360.0);
+                Properties.Settings.Default.Save();
+                RaisePropertyChanged(nameof(SpikeAngle));
+            }
+        }
+
+        public bool AutoSpikeAngle {
+            get => Properties.Settings.Default.AutoSpikeAngle;
+            set {
+                Properties.Settings.Default.AutoSpikeAngle = value;
+                Properties.Settings.Default.Save();
+                RaisePropertyChanged(nameof(AutoSpikeAngle));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        /// <summary>
+        /// Orientation measured from the last frame. Reported whether or not auto
+        /// mode is on, so a typed value can be checked against reality. The
+        /// multiplier is peak-over-mean of the directional profile; below roughly
         /// 1.2 the frame has no clear spike and the number should not be trusted.
         /// </summary>
-        public string SpikeAngleText {
+        public string MeasuredAngleText {
             get {
                 var m = this.DataModel;
-                if (double.IsNaN(m.MeasuredSpikeAngle)) return "spike angle: not detected";
-
-                string mode = m.SpikeAngleIsAuto ? "auto" : $"set {Properties.Settings.Default.spikeAngleDeg:F0}°";
-                return $"spike {m.MeasuredSpikeAngle:F1}°  (x{m.MeasuredSpikeAngleStrength:F2}, {mode})";
+                return double.IsNaN(m.MeasuredSpikeAngle)
+                    ? "not detected"
+                    : $"{m.MeasuredSpikeAngle:F1}°  (x{m.MeasuredSpikeAngleStrength:F2})";
             }
         }
 
@@ -168,6 +192,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public AsyncObservableCollection<DataPoint> PlotFocusPoints => this.DataModel.PlotFocusPoints;
         public AsyncObservableCollection<DataPoint> ArrowPoint => this.DataModel.ArrowPoint;
 
+        public ICommand UseMeasuredAngleCommand { get; private set; }
         public ICommand ClearChartCommand { get; private set; }
         public ICommand InputResetCommand { get; private set; }
         public ICommand HaltFocuserCommand { get; private set; }
@@ -201,6 +226,17 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
             // Commands are created before consumer registration so that no device
             // callback can fire a CanExecute against half-initialised state.
+            // Freeze the measurement into the manual value: measure with auto on,
+            // adopt it, then run fixed. Useful once the orientation is known good.
+            UseMeasuredAngleCommand = new RelayCommand(
+                _ => Guard("Use measured angle", () => {
+                    var measured = this.DataModel.MeasuredSpikeAngle;
+                    if (double.IsNaN(measured)) return;
+                    SpikeAngle = measured;
+                    AutoSpikeAngle = false;
+                }),
+                _ => !double.IsNaN(this.DataModel.MeasuredSpikeAngle));
+
             ClearChartCommand = new RelayCommand(_ => Guard("Clear chart", () => {
                 this.DataModel.ResetPlotData();
                 RaiseMeasurementProperties();
@@ -464,7 +500,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             RaisePropertyChanged(nameof(MinSpikeStep));
             RaisePropertyChanged(nameof(HasSpikePoints));
             RaisePropertyChanged(nameof(HasSpikeAngle));
-            RaisePropertyChanged(nameof(SpikeAngleText));
+            RaisePropertyChanged(nameof(MeasuredAngleText));
+            RaisePropertyChanged(nameof(IsSpikeMetricEnabled));
+            RaisePropertyChanged(nameof(SpikeAngle));
+            RaisePropertyChanged(nameof(AutoSpikeAngle));
         }
 
         /// <summary>

@@ -117,27 +117,8 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
-        /// <summary>
-        /// When set, the orientation measured from the image is used instead of
-        /// <see cref="SpikeAngle"/>. The measurement is taken and reported either way.
-        /// </summary>
-        public bool AutoSpikeAngle {
-            get => Properties.Settings.Default.AutoSpikeAngle;
-            set {
-                Properties.Settings.Default.AutoSpikeAngle = value;
-                Properties.Settings.Default.Save();
-                RaisePropertyChanged();
-            }
-        }
-
-        public double SpikeAngle {
-            get => Properties.Settings.Default.spikeAngleDeg;
-            set {
-                Properties.Settings.Default.spikeAngleDeg = Clamp(value, -360.0, 360.0);
-                Properties.Settings.Default.Save();
-                RaisePropertyChanged();
-            }
-        }
+        // Spike angle and auto-detection are exposed on the dockable panel instead of
+        // here, so they sit next to the measured value they are checked against.
 
         /// <summary>Local u-window sigma (tau). Caps how large varC can get.</summary>
         public double CoreSigmaPx {
