@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Cwseo.NINA.ManualFocuser.Tools.SpikeBatch</RootNamespace>
+    <AssemblyName>SpikeBatch</AssemblyName>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Single source of truth: the batch evaluator runs the exact same metric
+       code that the plugin runs inside N.I.N.A. -->
+  <ItemGroup>
+    <Compile Include="..\..\Models\SpikeCore.cs" Link="SpikeCore.cs" />
+  </ItemGroup>
+
+</Project>
