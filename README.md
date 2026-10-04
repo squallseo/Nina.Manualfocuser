@@ -577,6 +577,11 @@ with 1–5000 ms configurable within the camera's supported exposure range. This
 shows a magnified star, a normalized horizontal brightness profile and a rolling
 120-second single-star HFR graph (maximum 600 points). **Clear live graph** resets
 the history; changing exposure or ROI clears it too. Switching modes stops live capture.
+To select a star visually, stop live capture, click **Select ROI**, then click the
+star in the full-frame preview and click **Start live**. Letterbox margins are
+excluded from selection. The ROI position label identifies its sensor X/Y center;
+50/50 is the sensor center. If no star is detected, the HFR display states that
+explicitly instead of showing NaN.
 Up to 5 seconds is available when
 the mask needs more signal. Set **ROI center %** to the star's X/Y position in the
 full camera image (50/50 means the center). The preview uses a 256-pixel ROI,

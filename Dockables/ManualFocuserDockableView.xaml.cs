@@ -29,6 +29,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private async void OnLoaded(object sender, RoutedEventArgs e) {
             if (DataContext is ManualFocuserDockableVM vm) await vm.EnsureFocusTargetsLoadedAsync();
         }
+        private void OnPreviewClick(object sender, MouseButtonEventArgs e) {
+            if (DataContext is not ManualFocuserDockableVM vm || !vm.IsSelectingRoi || sender is not Image image || image.Source == null) return;
+            double scale = Math.Min(image.ActualWidth / image.Source.Width, image.ActualHeight / image.Source.Height);
+            if (scale <= 0) return;
+            double width = image.Source.Width * scale, height = image.Source.Height * scale;
+            var p = e.GetPosition(image);
+            double x = p.X - (image.ActualWidth - width) / 2, y = p.Y - (image.ActualHeight - height) / 2;
+            if (x < 0 || y < 0 || x > width || y > height) return;
+            vm.SelectPreviewRoi(x / width, y / height);
+        }
         private async void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
             if (IsLoaded && e.NewValue is ManualFocuserDockableVM vm) await vm.EnsureFocusTargetsLoadedAsync();
         }

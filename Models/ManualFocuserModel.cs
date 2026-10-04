@@ -291,7 +291,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         }
 
         public async Task<(double[] Pixels, int Width, int Height, bool HardwareRoi)> CaptureFocusPreviewAsync(
-            double seconds, int roiSize, double centerXPercent, double centerYPercent, CancellationToken token) {
+            double seconds, int roiSize, double centerXPercent, double centerYPercent, CancellationToken token, bool overview = false) {
             var camera = cameraMediator.GetInfo();
             if (camera?.Connected != true) throw new InvalidOperationException("Camera is disconnected.");
             token.ThrowIfCancellationRequested();
@@ -304,7 +304,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             int x = Math.Clamp((int)(camera.XSize * centerXPercent / 100) - size / 2, 0, camera.XSize - size);
             int y = Math.Clamp((int)(camera.YSize * centerYPercent / 100) - size / 2, 0, camera.YSize - size);
             var seq = new CaptureSequence(seconds, CaptureSequence.ImageTypes.SNAPSHOT, null, null, 1) {
-                Binning = new BinningMode(1, 1), EnableSubSample = camera.CanSubSample
+                Binning = new BinningMode(1, 1), EnableSubSample = camera.CanSubSample && !overview
             };
             if (seq.EnableSubSample) seq.SubSambleRectangle = new ObservableRectangle(x, y, size, size);
             // One capture at a time; no speculative retry against a native driver.
@@ -315,6 +315,21 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             int width = image.Properties.Width, height = image.Properties.Height;
             var raw = image.Data.FlatArray;
             if (width < 1 || height < 1 || (long)width * height != raw.Length) throw new InvalidOperationException("Invalid preview image dimensions.");
+            if (overview) {
+                int stride = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / 1024.0));
+                int outWidth = (width + stride - 1) / stride, outHeight = (height + stride - 1) / stride;
+                var fullPreview = new double[outWidth * outHeight];
+                for (int row = 0; row < outHeight; row++) {
+                    token.ThrowIfCancellationRequested();
+                    for (int col = 0; col < outWidth; col++) {
+                        double maximum = 0;
+                        for (int sy = row * stride; sy < Math.Min(height, (row + 1) * stride); sy++)
+                            for (int sx = col * stride; sx < Math.Min(width, (col + 1) * stride); sx++) maximum = Math.Max(maximum, raw[sy * width + sx]);
+                        fullPreview[row * outWidth + col] = maximum;
+                    }
+                }
+                return (fullPreview, outWidth, outHeight, false);
+            }
             bool hardwareRoi = seq.EnableSubSample && width <= size && height <= size;
             // Drivers/simulators can return a full frame despite a requested ROI.
             int left = hardwareRoi ? 0 : Math.Clamp(x, 0, Math.Max(0, width - size));

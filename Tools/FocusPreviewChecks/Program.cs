@@ -56,6 +56,9 @@ Check(roi.HardwareRoi && roi.Width == 32 && roi.Height == 32 && roi.Pixels[0] ==
 
 frameWidth = 128; frameHeight = 96;
 pixels = Enumerable.Range(0, frameWidth * frameHeight).Select(i => (ushort)i).ToArray();
+var overview = await model.CaptureFocusPreviewAsync(.2, 32, 75, 25, default, overview: true);
+Check(!captured.EnableSubSample && overview.Width == 128 && overview.Height == 96 && overview.Pixels[^1] == pixels[^1],
+    "ROI selection overview disables camera crop and preserves entire sensor frame");
 var ignoredRoi = await Capture();
 Check(!ignoredRoi.HardwareRoi && ignoredRoi.Pixels[0] == 8 * 128 + 80
     && ignoredRoi.Pixels[^1] == 39 * 128 + 111,

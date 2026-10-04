@@ -32,11 +32,24 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public AsyncObservableCollection<OxyPlot.DataPoint> LiveHfrPoints { get; } = new();
         public OxyPlot.DataPoint[] LiveStarProfile { get; private set; } = Array.Empty<OxyPlot.DataPoint>();
         public double LiveHfr { get; private set; } = double.NaN;
+        public string LiveHfrText => double.IsFinite(LiveHfr) ? $"Local HFR: {LiveHfr:F2} px" : "Local HFR: no star detected";
+        private ImageSource overviewImage;
+        public bool IsSelectingRoi { get; private set; }
+        public ImageSource LiveDisplayImage => IsSelectingRoi ? overviewImage : FocusPreviewImage;
+        public string RoiLocationText => IsSelectingRoi ? "Full frame: click a star to center the 256 px ROI." : $"ROI center X {PreviewCenterX:F1}%, Y {PreviewCenterY:F1}% (50/50 = sensor center), 256 px";
+        public ICommand SelectRoiCommand { get; private set; }
+        public void SelectPreviewRoi(double x, double y) {
+            if (!IsSelectingRoi) return;
+            PreviewCenterX = x * 100; PreviewCenterY = y * 100;
+            IsSelectingRoi = false; FocusPreviewImage = null;
+            RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText));
+            SetAssistStatus("ROI selected. Start live to see the star zoom.");
+        }
         public ICommand ClearLiveGraphCommand { get; private set; }
         public bool IsFocusAssistRunning => assistRunning;
         public double PreviewExposureMs { get => previewExposureMs; set { if (double.IsFinite(value)) previewExposureMs = Math.Clamp(value, 1, 5000); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
-        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
-        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
+        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); RaisePropertyChanged(nameof(RoiLocationText)); } }
+        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); RaisePropertyChanged(nameof(RoiLocationText)); } }
         public bool AnalyzeBahtinov { get => analyzeMask; set { analyzeMask = value; RaisePropertyChanged(); } }
         public bool BahtinovMaskConfirmed { get => maskConfirmed; set { maskConfirmed = value; RaisePropertyChanged(); CommandManager.InvalidateRequerySuggested(); } }
         public ImageSource FocusPreviewImage { get; private set; }
@@ -48,6 +61,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ICommand PreviewMoveOutCommand { get; private set; }
         private void InitializeFocusAssist() {
             StartFocusPreviewCommand = new AsyncCommand<int>(() => RunGuarded("Focus preview", RunFocusPreviewAsync), _ => CanStartAssist());
+            SelectRoiCommand = new AsyncCommand<int>(() => RunGuarded("Select ROI", CaptureOverviewAsync), _ => CanStartAssist());
             StopFocusPreviewCommand = new RelayCommand(_ => assistCts?.Cancel(), _ => assistRunning);
             ClearLiveGraphCommand = new RelayCommand(_ => LiveHfrPoints.Clear());
             BahtinovAFCommand = new AsyncCommand<int>(() => RunGuarded("Bahtinov AF", RunBahtinovAfAsync), _ => CanStartAssist() && FocuserInfo?.Connected == true && BahtinovMaskConfirmed);
@@ -57,6 +71,20 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
         }
         private bool CanStartAssist() => !disposed && !assistRunning && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && CameraInfo?.Connected == true && cameraMediator.IsFreeToCapture(this);
+        private async Task<int> CaptureOverviewAsync() {
+            if (!CanStartAssist()) return 0;
+            try {
+                BeginAssist(false);
+                SetAssistStatus("Capturing full frame for ROI selection...");
+                var frame = await DataModel.CaptureFocusPreviewAsync(PreviewExposureMs / 1000, 256, 50, 50, assistCts.Token, overview: true);
+                assistCts.Token.ThrowIfCancellationRequested();
+                overviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, null);
+                IsSelectingRoi = true;
+                RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText));
+                SetAssistStatus("Click an isolated star in the full-frame preview, then Start live.");
+                return 1;
+            } finally { EndAssist(false); }
+        }
         private void SetAssistStatus(string status) { FocusAssistStatus = status; RaisePropertyChanged(nameof(FocusAssistStatus)); }
         private void BeginAssist(bool moving) {
             assistCts?.Dispose(); assistCts = new CancellationTokenSource();
@@ -74,6 +102,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             if (!CanStartAssist()) return 0;
             try {
                 BeginAssist(false);
+                IsSelectingRoi = false;
+                RaisePropertyChanged(nameof(RoiLocationText));
                 LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
                 while (true) {
@@ -91,6 +121,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     assistCts.Token.ThrowIfCancellationRequested();
                     FocusPreviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, measurement);
                     RaisePropertyChanged(nameof(FocusPreviewImage));
+                    RaisePropertyChanged(nameof(LiveDisplayImage));
                     long now = clock.ElapsedMilliseconds;
                     LiveHfr = hfr;
                     LiveHfrPoints.Add(new OxyPlot.DataPoint(now / 1000.0, hfr));
@@ -102,6 +133,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     LiveStarProfile = Enumerable.Range(Math.Max(0, px - 64), Math.Min(frame.Width - 1, px + 64) - Math.Max(0, px - 64) + 1)
                         .Select(x => new OxyPlot.DataPoint(x - px, Math.Max(0, frame.Pixels[py * frame.Width + x] - background) / amplitude)).ToArray();
                     RaisePropertyChanged(nameof(LiveHfr));
+                    RaisePropertyChanged(nameof(LiveHfrText));
                     RaisePropertyChanged(nameof(LiveStarProfile));
                     string metric = mask ? measurement.IsValid ? $"Mask error {measurement.SignedErrorPixels:+0.00;-0.00;0.00} px" : $"HFR fallback: {measurement.FailureReason}" : double.IsFinite(hfr) ? $"Local HFR {hfr:F2} px" : "No isolated star detected";
                     if (mask && !measurement.IsValid) {

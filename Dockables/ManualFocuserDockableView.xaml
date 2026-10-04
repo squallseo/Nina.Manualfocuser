@@ -33,7 +33,8 @@
             <Style TargetType="TextBox">
                 <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
                 <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
-                <Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="MinHeight" Value="28"/>
+<Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
                 <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
                 <Setter Property="Padding" Value="6,3"/>
             </Style>
@@ -199,7 +200,8 @@
 
                             <CheckBox Content="Bahtinov mask installed; isolated star centered" IsChecked="{Binding BahtinovMaskConfirmed}" Margin="0,2,0,4"
                                       ToolTip="Required for experimental autofocus. Scan uses NINA autofocus step size and initial offset count; current filter stays selected."/>
-                            <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+                            <TextBlock Text="{Binding RoiLocationText}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+<TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
                             <Image Source="{Binding FocusPreviewImage}" MaxHeight="180" Stretch="Uniform"/>
 
                         </StackPanel>
@@ -209,20 +211,22 @@
                     <Border.Style><Style TargetType="Border" BasedOn="{StaticResource FocusCard}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style>
                     <StackPanel>
                         <WrapPanel>
-                            <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,3"/>
                             <TextBox Width="50" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
-                            <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,3"/>
                             <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" Margin="0,0,3,3"/>
                             <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
-                            <Button Content="Start live" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                            <Button Content="Select ROI" Command="{Binding SelectRoiCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Stop live first. Capture the full frame, then click a star to select its ROI."/>
+<Button Content="Start live" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
                             <Button Content="Stop live" Command="{Binding StopFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                            <TextBlock Text="Step" VerticalAlignment="Center" Margin="4,0,5,0"/>
+                            <TextBlock Text="Step" VerticalAlignment="Center" Margin="4,0,5,3"/>
                             <TextBox Width="48" Text="{Binding UserStep, UpdateSourceTrigger=LostFocus}" Margin="0,0,4,3"/>
                             <Button Content="In" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
                             <Button Content="Out" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
                             <CheckBox Content="Bahtinov overlay" IsChecked="{Binding AnalyzeBahtinov}" VerticalAlignment="Center" Margin="4,0,0,3"/>
                         </WrapPanel>
-                        <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+                        <TextBlock Text="{Binding RoiLocationText}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+<TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -392,10 +396,10 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,5">
                     <Button DockPanel.Dock="Right" Content="Clear live graph" Command="{Binding ClearLiveGraphCommand}" Style="{StaticResource FocusButton}"/>
-                    <TextBlock Text="{Binding LiveHfr, StringFormat='Local HFR: {0:F2} px'}" VerticalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="{Binding LiveHfrText}" VerticalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/>
                 </DockPanel>
                 <Grid Grid.Row="1" Margin="0,0,6,0"><Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <Image Source="{Binding FocusPreviewImage}" Stretch="Uniform"/>
+                    <Image Source="{Binding LiveDisplayImage}" Stretch="Uniform" MouseLeftButtonDown="OnPreviewClick" Cursor="Cross" ToolTip="{Binding RoiLocationText}"/>
                     <oxy:Plot Grid.Row="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
                         <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Star profile (px)" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/><oxy:LinearAxis Position="Left" Minimum="0" Maximum="1.1" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/></oxy:Plot.Axes>
                         <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveStarProfile}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}"/></oxy:Plot.Series>
