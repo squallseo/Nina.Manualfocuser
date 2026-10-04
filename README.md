@@ -582,6 +582,12 @@ star in the full-frame preview and click **Start live**. Letterbox margins are
 excluded from selection. The ROI position label identifies its sensor X/Y center;
 50/50 is the sensor center. If no star is detected, the HFR display states that
 explicitly instead of showing NaN.
+Live timing shows capture/download, NINA-reported download, conversion, crop,
+analysis and preview/graph preparation in milliseconds. NINA's download timer can
+overlap driver work and does not isolate physical USB transfer time. Logs tagged
+`[ManualFocuser/LiveTiming]` record the first frame and every 20th frame, including
+actual source dimensions, hardware ROI and requested exposure. Compare those
+measurements before assuming the camera or CPU is the bottleneck.
 Up to 5 seconds is available when
 the mask needs more signal. Set **ROI center %** to the star's X/Y position in the
 full camera image (50/50 means the center). The preview uses a 256-pixel ROI,

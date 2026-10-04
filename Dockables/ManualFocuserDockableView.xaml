@@ -227,6 +227,7 @@
                         </WrapPanel>
                         <TextBlock Text="{Binding RoiLocationText}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
 <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+<TextBlock Text="{Binding LiveTimingText}" TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource SecondaryBrush}" ToolTip="Capture+download is measured end to end. Host download is the separate duration reported by NINA; it can overlap driver work and is not pure USB transfer time. Preview/graph measures CPU preparation, not physical display latency."/>
                     </StackPanel>
                 </Border>
             </StackPanel>

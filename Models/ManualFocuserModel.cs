@@ -22,6 +22,8 @@ using System.Threading.Tasks;
 
 namespace Cwseo.NINA.ManualFocuser.Models {
     public class ManualFocuserModel {
+        public sealed record PreviewTiming(double CaptureAndDownloadMs, double HostDownloadMs, double ConversionMs, double CropMs, int SourceWidth, int SourceHeight);
+        public PreviewTiming LastPreviewTiming { get; private set; }
         private readonly IProfileService profileService;
         private readonly IImagingMediator imagingMediator;
         private readonly ICameraMediator cameraMediator;
@@ -308,9 +310,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             };
             if (seq.EnableSubSample) seq.SubSambleRectangle = new ObservableRectangle(x, y, size, size);
             // One capture at a time; no speculative retry against a native driver.
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             var exposure = await imagingMediator.CaptureImage(seq, token, NullPreviewProgress.Instance);
+            double captureMs = timer.Elapsed.TotalMilliseconds;
+            double hostDownloadMs = cameraMediator.GetInfo().LastDownloadTime * 1000;
             if (exposure == null) throw new InvalidOperationException("Camera returned no preview image.");
+            timer.Restart();
             var image = await exposure.ToImageData(NullPreviewProgress.Instance, token);
+            double conversionMs = timer.Elapsed.TotalMilliseconds;
+            timer.Restart();
             if (image?.Properties == null || image.Data?.FlatArray == null) throw new InvalidOperationException("Preview image contains no pixels.");
             int width = image.Properties.Width, height = image.Properties.Height;
             var raw = image.Data.FlatArray;
@@ -328,6 +336,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         fullPreview[row * outWidth + col] = maximum;
                     }
                 }
+                LastPreviewTiming = new(captureMs, hostDownloadMs, conversionMs, timer.Elapsed.TotalMilliseconds, width, height);
                 return (fullPreview, outWidth, outHeight, false);
             }
             bool hardwareRoi = seq.EnableSubSample && width <= size && height <= size;
@@ -340,6 +349,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 token.ThrowIfCancellationRequested();
                 for (int col = 0; col < cropWidth; col++) pixels[row * cropWidth + col] = raw[(top + row) * width + left + col];
             }
+            LastPreviewTiming = new(captureMs, hostDownloadMs, conversionMs, timer.Elapsed.TotalMilliseconds, width, height);
             return (pixels, cropWidth, cropHeight, hardwareRoi);
         }
 

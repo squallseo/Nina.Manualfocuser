@@ -33,6 +33,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public OxyPlot.DataPoint[] LiveStarProfile { get; private set; } = Array.Empty<OxyPlot.DataPoint>();
         public double LiveHfr { get; private set; } = double.NaN;
         public string LiveHfrText => double.IsFinite(LiveHfr) ? $"Local HFR: {LiveHfr:F2} px" : "Local HFR: no star detected";
+        public string LiveTimingText { get; private set; } = "Timing will appear after the first live frame.";
         private ImageSource overviewImage;
         public bool IsSelectingRoi { get; private set; }
         public ImageSource LiveDisplayImage => IsSelectingRoi ? overviewImage : FocusPreviewImage;
@@ -106,6 +107,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(RoiLocationText));
                 LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
+                int frames = 0;
                 while (true) {
                     assistCts.Token.ThrowIfCancellationRequested();
                     if (pendingPreviewMove != 0) {
@@ -114,11 +116,15 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         try { await focuserMediator.MoveFocuserRelative(relative, assistCts.Token); }
                         finally { IsMoving = false; }
                     }
-                    var frame = await DataModel.CaptureFocusPreviewAsync(PreviewExposureMs / 1000, 256, PreviewCenterX, PreviewCenterY, assistCts.Token);
+                    double requestedExposureMs = PreviewExposureMs;
+                    var frame = await DataModel.CaptureFocusPreviewAsync(requestedExposureMs / 1000, 256, PreviewCenterX, PreviewCenterY, assistCts.Token);
+                    var processingTimer = Stopwatch.StartNew();
                     bool mask = AnalyzeBahtinov;
-                    var measurement = await Task.Run(() => mask ? BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height) : null, assistCts.Token);
+                    var measurement = mask ? await Task.Run(() => BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height), assistCts.Token) : null;
                     double hfr = await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height), assistCts.Token);
                     assistCts.Token.ThrowIfCancellationRequested();
+                    double analysisMs = processingTimer.Elapsed.TotalMilliseconds;
+                    processingTimer.Restart();
                     FocusPreviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, measurement);
                     RaisePropertyChanged(nameof(FocusPreviewImage));
                     RaisePropertyChanged(nameof(LiveDisplayImage));
@@ -128,7 +134,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     while (LiveHfrPoints.Count > 600 || (LiveHfrPoints.Count > 1 && LiveHfrPoints[0].X < now / 1000.0 - 120)) LiveHfrPoints.RemoveAt(0);
                     int peak = Array.IndexOf(frame.Pixels, frame.Pixels.Max());
                     int px = peak % frame.Width, py = peak / frame.Width;
-                    double background = frame.Pixels.OrderBy(p => p).ElementAt(frame.Pixels.Length / 2);
+                    var profileSorted = (double[])frame.Pixels.Clone(); Array.Sort(profileSorted);
+                    double background = profileSorted[profileSorted.Length / 2];
                     double amplitude = Math.Max(1, frame.Pixels[peak] - background);
                     LiveStarProfile = Enumerable.Range(Math.Max(0, px - 64), Math.Min(frame.Width - 1, px + 64) - Math.Max(0, px - 64) + 1)
                         .Select(x => new OxyPlot.DataPoint(x - px, Math.Max(0, frame.Pixels[py * frame.Width + x] - background) / amplitude)).ToArray();
@@ -137,9 +144,15 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     RaisePropertyChanged(nameof(LiveStarProfile));
                     string metric = mask ? measurement.IsValid ? $"Mask error {measurement.SignedErrorPixels:+0.00;-0.00;0.00} px" : $"HFR fallback: {measurement.FailureReason}" : double.IsFinite(hfr) ? $"Local HFR {hfr:F2} px" : "No isolated star detected";
                     if (mask && !measurement.IsValid) {
-                        hfr = QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height);
                         if (double.IsFinite(hfr)) metric = $"Local HFR {hfr:F2} px | mask not detected";
                     }
+                    double previewMs = processingTimer.Elapsed.TotalMilliseconds;
+                    now = clock.ElapsedMilliseconds;
+                    var timing = DataModel.LastPreviewTiming;
+                    LiveTimingText = $"Capture+download {timing.CaptureAndDownloadMs:F0} ms (host download {timing.HostDownloadMs:F0}) | Convert {timing.ConversionMs:F0} | Crop {timing.CropMs:F0} | Analyze {analysisMs:F0} | Preview/graph {previewMs:F0} ms";
+                    RaisePropertyChanged(nameof(LiveTimingText));
+                    if (++frames == 1 || frames % 20 == 0)
+                        Logger.Info($"[ManualFocuser/LiveTiming] frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
                     SetAssistStatus($"{metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
                     previous = now;
                 }
