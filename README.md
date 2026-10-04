@@ -569,6 +569,52 @@ positions cannot generate a fit. Three new regressions bring the core/fit checks
 to 31. Standalone layout previews were inspected at widths 420 and 650 pixels;
 they use example stars and a placeholder chart, not a running NINA screen.
 
+## Fast focus preview and experimental Bahtinov autofocus
+
+Open **Fast focus / Bahtinov** to start repeated preview exposures. Default exposure is
+250 ms; 100–500 ms is useful for bright stars, with up to 5 seconds available when
+the mask needs more signal. Set **ROI center %** to the star's X/Y position in the
+full camera image (50/50 means the center). The preview uses a 256-pixel ROI,
+1×1 binning and the current filter/gain. It requests a hardware subframe when
+supported; otherwise it crops after full-frame download. It displays the measured
+frame interval, which includes exposure, download and processing. Images are not
+saved. In/Out moves use the manual Step and run between exposures. Stop cancels
+the loop and releases the camera reservation.
+
+Without a mask, the preview reports a local single-star half-flux radius; this is
+not the chart's NINA multi-star HFR. Enable **Analyze mask** to overlay three
+detected lines and display signed pixel error. Invalid patterns show the HFR
+fallback or an unavailable measurement.
+
+For experimental autofocus, center an isolated star with a physical Bahtinov
+mask installed, confirm the mask checkbox, then select **Auto focus → Bahtinov
+scan (experimental) → Run Bahtinov AF**. The scan uses NINA's autofocus step size
+and initial offset count (bounded to 1–12 offsets each side). It validates the
+initial image before moving, discards one frame after movement and takes the
+median of three valid frames at each position. It searches for a signed-error
+zero bracket, interpolates only inside that bracket, approaches from the scan
+direction and verifies final absolute error ≤0.5 pixel. Invalid/unstable patterns,
+changed line orientation, failed moves, missing bracket or cancellation stop the
+run. The focuser remains at its current position on failure. Remove the mask and
+check ordinary-image HFR after successful focus.
+
+The [research record](Docs/BahtinovResearch.md) distinguishes optical papers,
+public measurement code and SharpCap's documented scan workflow from our own
+numerical choices. This implementation copies no third-party source/dependencies.
+It is synthetically verified, not yet validated with real masked through-focus
+images or QHY600M timing.
+
+Generate five clearly labeled synthetic Fourier-pupil FITS/PGM samples with:
+
+```powershell
+dotnet run --project Tools/BahtinovChecks/BahtinovChecks.csproj -c Release -- bin/bahtinov-samples
+```
+
+The generated FITS can be selected as simulator preview input. A folder of images
+does not couple simulated optical focus to focuser position; autofocus convergence
+is tested separately with a simulated movement/measurement workflow. See the
+[sample generator documentation](Tools/BahtinovChecks/README.md).
+
 End of Document
 
 

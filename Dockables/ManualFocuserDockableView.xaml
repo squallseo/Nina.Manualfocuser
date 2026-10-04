@@ -118,10 +118,27 @@
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
                             </Style></WrapPanel.Style>
-                            <ComboBox MinWidth="110" MinHeight="28" SelectedIndex="0" Margin="0,0,5,3"><ComboBoxItem Content="Linear scan"/></ComboBox>
-                            <Button Style="{StaticResource FocusButton}" Content="Run autofocus" Command="{Binding LinearAFCommand}" Margin="0,0,0,3"/>
+                            <ComboBox x:Name="AfAlgorithmSelector" MinWidth="110" MinHeight="28" SelectedValuePath="Tag" SelectedValue="Linear" Margin="0,0,5,3"
+                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <ComboBoxItem Content="Linear scan" Tag="Linear"/>
+                                <ComboBoxItem Content="Bahtinov scan (experimental)" Tag="Bahtinov"/>
+                            </ComboBox>
+                            <Button Content="Run autofocus" Command="{Binding LinearAFCommand}" Margin="0,0,0,3">
+                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}"><Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                </Style.Triggers></Style></Button.Style>
+                            </Button>
+                            <Button Content="Run Bahtinov AF" Command="{Binding BahtinovAFCommand}" Margin="0,0,0,3">
+                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                                </Style.Triggers></Style></Button.Style>
+                            </Button>
                             <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="8,0,0,3" VerticalAlignment="Center"
-                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
+                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <CheckBox.Style><Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/><Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                </Style.Triggers></Style></CheckBox.Style>
+                            </CheckBox>
                         </WrapPanel>
                     </StackPanel>
                 </Border>
@@ -165,7 +182,31 @@
                     </StackPanel>
                 </Border>
                 </local:FocusCardsPanel>
-
+                <Expander x:Name="FocusAssistExpander" Header="Fast focus / Bahtinov" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6">
+                    <Expander.Style><Style TargetType="Expander"><Setter Property="IsExpanded" Value="False"/><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsFocusAssistRunning}" Value="True"><Setter Property="IsExpanded" Value="True"/></DataTrigger>
+                    </Style.Triggers></Style></Expander.Style>
+                    <Border Style="{StaticResource FocusCard}" Margin="0,4,0,0">
+                        <StackPanel>
+                            <WrapPanel>
+                                <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Width="48" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
+                                <TextBlock Text="ROI center %" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" ToolTip="Star horizontal position as a percentage of the full image." Margin="0,0,3,3"/>
+                                <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}" ToolTip="Star vertical position as a percentage of the full image." Margin="0,0,8,3"/>
+                                <CheckBox Content="Analyze mask" IsChecked="{Binding AnalyzeBahtinov}" Margin="0,0,8,3" VerticalAlignment="Center"/>
+                                <Button Content="Start" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                                <Button Content="Stop" Command="{Binding StopFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                                <Button Content="In" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Move by the manual Step between preview exposures."/>
+                                <Button Content="Out" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Move by the manual Step between preview exposures."/>
+                            </WrapPanel>
+                            <CheckBox Content="Bahtinov mask installed; isolated star centered" IsChecked="{Binding BahtinovMaskConfirmed}" Margin="0,2,0,4"
+                                      ToolTip="Required for experimental autofocus. Scan uses NINA autofocus step size and initial offset count; current filter stays selected."/>
+                            <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+                            <Image Source="{Binding FocusPreviewImage}" Stretch="Uniform" MaxHeight="240" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Expander>
             </StackPanel>
             </ScrollViewer>
             <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140">

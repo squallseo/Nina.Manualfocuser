@@ -266,6 +266,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
             this.DataModel = new ManualFocuserModel(profileService, imagingMediator, cameraMediator, starDetectionSelector, starAnnotatorSelector);
             InitializeFocusTargets(profileService);
+            InitializeFocusAssist();
 
             // Commands are created before consumer registration so that no device
             // callback can fire a CanExecute against half-initialised state.
@@ -298,6 +299,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             }));
 
             HaltFocuserCommand = new RelayCommand(_ => Guard("Halt", () => {
+                try { assistCts?.Cancel(); } catch { }
                 try { moveCts?.Cancel(); } catch { }
                 try { captureCts?.Cancel(); } catch { }
             }));
@@ -319,6 +321,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public void Dispose() {
             if (disposed) return;
             disposed = true;
+            try { assistCts?.Cancel(); } catch { }
             try { gotoCts?.Cancel(); } catch { }
 
             // On shutdown cleanup
@@ -432,7 +435,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         // registered itself with the mediator. CanExecute runs on the dispatcher,
         // so dereferencing it unguarded throws straight into the WPF message loop.
         private bool CanMove() {
-            return FocuserInfo?.Connected == true && !IsMoving && !IsGoingToFocusTarget;
+            return !disposed && FocuserInfo?.Connected == true && !IsMoving && !IsCapturing && !IsGoingToFocusTarget;
         }
 
         private void ResetCts() {

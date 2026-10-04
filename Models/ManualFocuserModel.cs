@@ -290,6 +290,49 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return (hfrResult, spikeResult);
         }
 
+        public async Task<(double[] Pixels, int Width, int Height, bool HardwareRoi)> CaptureFocusPreviewAsync(
+            double seconds, int roiSize, double centerXPercent, double centerYPercent, CancellationToken token) {
+            var camera = cameraMediator.GetInfo();
+            if (camera?.Connected != true) throw new InvalidOperationException("Camera is disconnected.");
+            token.ThrowIfCancellationRequested();
+            if (!double.IsFinite(seconds) || seconds <= 0 || !double.IsFinite(centerXPercent) || !double.IsFinite(centerYPercent) || roiSize < 32)
+                throw new ArgumentException("Invalid preview exposure or ROI.");
+            if ((camera.ExposureMin > 0 && seconds < camera.ExposureMin) || (camera.ExposureMax > 0 && seconds > camera.ExposureMax))
+                throw new InvalidOperationException($"Preview exposure is outside the camera range ({camera.ExposureMin}–{camera.ExposureMax} seconds).");
+            int size = Math.Min(roiSize, Math.Min(camera.XSize, camera.YSize));
+            if (size < 32) throw new InvalidOperationException("Camera dimensions are unavailable.");
+            int x = Math.Clamp((int)(camera.XSize * centerXPercent / 100) - size / 2, 0, camera.XSize - size);
+            int y = Math.Clamp((int)(camera.YSize * centerYPercent / 100) - size / 2, 0, camera.YSize - size);
+            var seq = new CaptureSequence(seconds, CaptureSequence.ImageTypes.SNAPSHOT, null, null, 1) {
+                Binning = new BinningMode(1, 1), EnableSubSample = camera.CanSubSample
+            };
+            if (seq.EnableSubSample) seq.SubSambleRectangle = new ObservableRectangle(x, y, size, size);
+            // One capture at a time; no speculative retry against a native driver.
+            var exposure = await imagingMediator.CaptureImage(seq, token, NullPreviewProgress.Instance);
+            if (exposure == null) throw new InvalidOperationException("Camera returned no preview image.");
+            var image = await exposure.ToImageData(NullPreviewProgress.Instance, token);
+            if (image?.Properties == null || image.Data?.FlatArray == null) throw new InvalidOperationException("Preview image contains no pixels.");
+            int width = image.Properties.Width, height = image.Properties.Height;
+            var raw = image.Data.FlatArray;
+            if (width < 1 || height < 1 || (long)width * height != raw.Length) throw new InvalidOperationException("Invalid preview image dimensions.");
+            bool hardwareRoi = seq.EnableSubSample && width <= size && height <= size;
+            // Drivers/simulators can return a full frame despite a requested ROI.
+            int left = hardwareRoi ? 0 : Math.Clamp(x, 0, Math.Max(0, width - size));
+            int top = hardwareRoi ? 0 : Math.Clamp(y, 0, Math.Max(0, height - size));
+            int cropWidth = Math.Min(size, width), cropHeight = Math.Min(size, height);
+            var pixels = new double[cropWidth * cropHeight];
+            for (int row = 0; row < cropHeight; row++) {
+                token.ThrowIfCancellationRequested();
+                for (int col = 0; col < cropWidth; col++) pixels[row * cropWidth + col] = raw[(top + row) * width + left + col];
+            }
+            return (pixels, cropWidth, cropHeight, hardwareRoi);
+        }
+
+        private sealed class NullPreviewProgress : IProgress<ApplicationStatus> {
+            public static readonly NullPreviewProgress Instance = new();
+            public void Report(ApplicationStatus value) { }
+        }
+
         private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress) {
             IExposureData image;
             var retries = 0;
