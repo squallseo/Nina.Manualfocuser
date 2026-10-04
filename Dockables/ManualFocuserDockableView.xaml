@@ -82,49 +82,47 @@
                 <Border Style="{StaticResource FocusCard}">
                     <StackPanel>
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="Focus" FontSize="13" FontWeight="SemiBold"/>
-                            <CheckBox Grid.Column="1" Content="Expose after move" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" FontSize="11"/>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <ComboBox x:Name="FocusModeSelector" SelectedValuePath="Tag" SelectedValue="Manual" MinHeight="28" MinWidth="105"
+                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <ComboBoxItem Content="Manual focus" Tag="Manual"/>
+                                <ComboBoxItem Content="Auto focus" Tag="Auto"/>
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Use best" Command="{Binding InputResetCommand}" Margin="5,0,0,0"
+                                    IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"
+                                    ToolTip="Set target to the best measured position and restore the configured step size.">
+                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
+                                    <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+                                </Style></Button.Style>
+                            </Button>
+                            <CheckBox Grid.Column="2" Content="Expose" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0" ToolTip="Take an exposure after each focus movement."/>
                         </Grid>
                         <WrapPanel Margin="0,6,0,0">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,10,5">
+                            <WrapPanel.Style><Style TargetType="WrapPanel">
+                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+                            </Style></WrapPanel.Style>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,10,3">
                                 <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
                                 <TextBox Width="70" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"/>
                                 <Button Style="{StaticResource FocusButton}" Content="Move" Margin="4,0,0,0" Command="{Binding MoveToPositionCommand}"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
                                 <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
                                 <TextBox Width="52" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"/>
                                 <Button Style="{StaticResource FocusButton}" Content="In −" Margin="4,0,0,0" Command="{Binding MoveINCommand}"/>
                                 <Button Style="{StaticResource FocusButton}" Content="Out +" Margin="4,0,0,0" Command="{Binding MoveOUTCommand}"/>
                             </StackPanel>
                         </WrapPanel>
-                        <WrapPanel>
-                            <Button Content="Use best" Command="{Binding InputResetCommand}" Style="{StaticResource FocusButton}" ToolTip="Set target to the best measured position and restore the configured step size."/>
-                            <Button Content="Clear chart" Command="{Binding ClearChartCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"/>
-                            <Button Content="Stop focus" Command="{Binding HaltFocuserCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
-                                    Visibility="{Binding IsMoving, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                        <WrapPanel Margin="0,6,0,0">
+                            <WrapPanel.Style><Style TargetType="WrapPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                            </Style></WrapPanel.Style>
+                            <ComboBox MinWidth="110" MinHeight="28" SelectedIndex="0" Margin="0,0,5,3"><ComboBoxItem Content="Linear scan"/></ComboBox>
+                            <Button Style="{StaticResource FocusButton}" Content="Run autofocus" Command="{Binding LinearAFCommand}" Margin="0,0,0,3"/>
+                            <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="8,0,0,3" VerticalAlignment="Center"
+                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
                         </WrapPanel>
-                        <Expander Header="Autofocus" IsExpanded="False" Margin="0,6,0,0">
-                            <StackPanel Margin="0,6,0,0">
-                                <WrapPanel>
-                                    <ComboBox MinWidth="135" MinHeight="28" SelectedIndex="0" Margin="0,0,5,0"><ComboBoxItem Content="Linear scan"/></ComboBox>
-                                    <Button Style="{StaticResource FocusButton}" Content="Run autofocus" Command="{Binding LinearAFCommand}"/>
-                                    <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="8,0,0,0" VerticalAlignment="Center"
-                                              IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
-                                </WrapPanel>
-                            </StackPanel>
-                        </Expander>
-                        <Expander Header="Spike analysis" IsExpanded="False" Margin="0,4,0,0"
-                                  Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                            <WrapPanel Margin="0,6,0,0">
-                                <TextBlock Text="Angle" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="50" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding SpikeAngle, UpdateSourceTrigger=LostFocus}"/>
-                                <CheckBox Content="Auto" IsChecked="{Binding AutoSpikeAngle}" VerticalAlignment="Center" Margin="8,0"/>
-                                <TextBlock Text="{Binding MeasuredAngleText}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <Button Content="Use angle" Command="{Binding UseMeasuredAngleCommand}" Style="{StaticResource FocusButton}"/>
-                            </WrapPanel>
-                        </Expander>
                     </StackPanel>
                 </Border>
                 <Border Grid.Row="1" Style="{StaticResource FocusCard}">
@@ -154,10 +152,26 @@
                             <Button Grid.Column="1" Content="Stop GOTO" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
                                     Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
                         </Grid>
+                        <Expander Header="Spike analysis" IsExpanded="False" Margin="0,4,0,0"
+                                  Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+                            <WrapPanel Margin="0,6,0,0">
+                                <TextBlock Text="Angle" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Width="50" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding SpikeAngle, UpdateSourceTrigger=LostFocus}"/>
+                                <CheckBox Content="Auto" IsChecked="{Binding AutoSpikeAngle}" VerticalAlignment="Center" Margin="8,0"/>
+                                <TextBlock Text="{Binding MeasuredAngleText}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <Button Content="Use angle" Command="{Binding UseMeasuredAngleCommand}" Style="{StaticResource FocusButton}"/>
+                            </WrapPanel>
+                        </Expander>
                     </StackPanel>
                 </Border>
                 </local:FocusCardsPanel>
-                <WrapPanel Margin="2,0,0,5" ToolTip="{Binding SpikeDisplayStatus}">
+
+            </StackPanel>
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                <Grid Margin="0,0,0,5">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <WrapPanel Margin="2,0,6,0" VerticalAlignment="Center" ToolTip="{Binding SpikeDisplayStatus}">
                     <TextBlock Text="HFR  " Foreground="{StaticResource SecondaryBrush}"/>
                     <TextBlock Text="{Binding MinHFR, StringFormat=F3}" FontWeight="SemiBold" Margin="0,0,10,0"/>
                     <TextBlock Text="Pos  " Foreground="{StaticResource SecondaryBrush}"/>
@@ -165,7 +179,10 @@
                     <TextBlock Text="Δ  " Foreground="{StaticResource SecondaryBrush}"/>
                     <TextBlock Text="{Binding HFRDelta, StringFormat=F3}"/>
                 </WrapPanel>
-            </StackPanel>
+                    <Button Grid.Column="1" Content="Stop focus" Command="{Binding HaltFocuserCommand}" Style="{StaticResource FocusButton}" Margin="0,0,5,0"
+                            Visibility="{Binding IsMoving, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                    <Button Grid.Column="2" Content="Clear chart" Command="{Binding ClearChartCommand}" Style="{StaticResource FocusButton}"/>
+                </Grid>
             <oxy:Plot
                 Grid.Row="1" Margin="0,0,0,0"
                 Background="{StaticResource BackgroundBrush}"
@@ -308,6 +325,7 @@
                         Y="{Binding MinHFR}" />
                 </oxy:Plot.Annotations>
             </oxy:Plot>
+            </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>

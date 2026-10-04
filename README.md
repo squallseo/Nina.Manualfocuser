@@ -538,13 +538,16 @@ on the right. Narrower docks stack them in the same order.
 The star picker is a collapsed dropdown with always-visible **Refresh** and
 **GOTO** buttons alongside it. Minimum altitude remains in the card header;
 long status text is available as a tooltip. Compact padding, 28-pixel buttons,
-and folded autofocus/spike controls leave more space for the chart. Button
+and mode-specific focus controls leave more space for the chart. Button
 hover background and foreground use NINA's `ButtonBackgroundSelectedBrush`
 and `ButtonForegroundBrush`, following the profile color schema; normal/pressed
 background uses `ButtonBackgroundBrush`.
-The collapsed **Autofocus** section contains a method selector (currently only
-**Linear scan**), **Run autofocus**, and **Single pass**. **Stop focus** is visible
-in the manual controls during movement, including an autofocus run.
+The mode selector defaults to **Manual focus**, showing target and step controls
+with **Use best** in the top row. Selecting **Auto focus** replaces those controls
+with the algorithm selector (currently only **Linear scan**), **Run autofocus**,
+and **Single pass**. Changing the selection does not start a run. **Clear chart**
+and the running operation's **Stop focus** button are in the chart toolbar.
+The collapsed **Spike analysis** options are below the **Focus star** picker.
 
 Linear refers to scanning at fixed position intervals, not a straight-line fit.
 Both coarse and fine passes use a weighted quadratic fit. A short, one-sided
