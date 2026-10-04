@@ -480,6 +480,56 @@ dotnet run --project Tools/SpikeBatch -c Release -- `
   --out Tools/SpikeBatch/bin/analysis/sep19.csv
 ```
 
+## 16. HFR fallback and focus-star GOTO
+
+The panel always retains the host HFR measurement. A separate, conservative
+display gate checks whether the selected axis contains extended line signal on
+both sides of each star, across three radial bands, against parallel background
+strips. At least the configured minimum number of stars must pass, along with
+the profile SNR check. Every exposure contributing to an averaged focus point
+must pass. Otherwise the panel clears the spike curve/minimum, hides its axis
+and series, and displays `Spike detection insufficient · using HFR`. The measured
+angle is also withheld until the gate passes. Raw diagnostic metrics remain
+available, with a new `clearSpikes` CSV column.
+
+This is a heuristic for usable line signal, not proof of an optical diffraction
+pattern. Weak, broad or heavily defocused real spikes can be rejected. Replay
+with `--roi-scale 3.5 --u-max 60` rejected all 36 September 10 and 33 September 19
+autofocus frames; the September replays used `--saved-stars --auto-angle`.
+The February 18 visible-spike control, with configured angle 90°, retained 2 of
+4 frames. Five new synthetic morphology checks cover a circular star, defocus
+ring, bilateral line, one-sided artifact and wrong axis; 28 core checks pass.
+
+Open **Focus star · recommend / GOTO** and click **Refresh stars**. The plugin
+uses NINA's installed bright-star catalogue (magnitude ≤ 4), profile latitude,
+longitude and elevation, and current UTC through NINA's coordinate transform.
+It lists up to 20 candidates ordered by altitude, then magnitude, above the
+minimum altitude (default 45°, adjustable 15–85°) and 5° above the profile's
+custom horizon. Refresh after changing location, altitude limits or waiting.
+These are visibility suggestions; binary companions, crowding, Moon separation,
+and whether the camera will saturate are not evaluated in this initial version.
+
+Select a star and press **GOTO selected star**. The mount must be connected and
+unparked, the guider disconnected, and capture, focus movement and mount slews
+idle. The altitude/horizon check is repeated immediately before moving. NINA's
+telescope mediator handles the slew; **Cancel GOTO** cancels its token. The camera
+is reserved during movement. On success the old target's focus chart and tracks
+are reset. Take a short exposure afterward to check saturation and actual spike
+detection. This version does not automatically expose, plate-solve, return to
+the original target, or operate a mask.
+
+Run `dotnet run --project Tools/FocusChecks -c Release` on Windows with NINA 3.2
+installed and its catalogue initialized. The harness uses the installed native
+astronomy libraries, with no migration scripts, to verify location/time
+validation, horizontal coordinates, horizon clearance and catalogue readability.
+All 11 checks pass. It sends no equipment commands; real GOTO and NINA UI behavior
+still require simulator/in-application verification.
+
+Bahtinov analysis remains a follow-up stage. NINA already provides a manual
+[Bahtinov Analyzer](https://nighttime-imaging.eu/docs/master/site/tabs/imaging/).
+Its three-line alignment error must be handled separately from ordinary spider
+spike width, and validated on masked focus sweeps before controlling a focuser.
+
 End of Document
 
 

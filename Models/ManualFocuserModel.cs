@@ -71,6 +71,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double MeasuredSpikeAngle { get; private set; } = double.NaN;
         public double MeasuredSpikeAngleStrength { get; private set; }
         public bool SpikeAngleIsAuto { get; private set; }
+        public bool HasClearSpikes { get; private set; }
+        public string SpikeDisplayStatus { get; private set; } = "HFR · awaiting measurement";
 
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
         public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints { get; } = new AsyncObservableCollection<ScatterErrorPoint>();
@@ -192,6 +194,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             MinSpike = 0.0;
             MeasuredSpikeAngle = double.NaN;
             MeasuredSpikeAngleStrength = 0.0;
+            HasClearSpikes = false;
+            SpikeDisplayStatus = "HFR · awaiting measurement";
 
             // Star tracking must restart with the plot, otherwise a new run keeps
             // chasing stars seeded in the previous one.
@@ -219,6 +223,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             var measures = new List<(MeasureAndError hfr, MeasureAndError spike)>(frames);
             var spikeParams = BuildSpikeParams();
             bool spikeEnabled = Properties.Settings.Default.EnableSpikeMetric;
+            HasClearSpikes = false;
+            SpikeDisplayStatus = spikeEnabled ? "Spike detection insufficient · using HFR" : "HFR";
             if (plottedSpikeMetric != spikeParams.metricKind) {
                 // Different metrics have different units; do not combine them
                 // into one curve when the user changes the selection.
@@ -240,6 +246,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             }
 
             if (measures.Count == 0) {
+                SpikeFocusPoints.Clear();
+                MinSpike = MinSpikeStep = 0;
                 return (new MeasureAndError { Measure = 0, Stdev = 1000 },
                         new MeasureAndError { Measure = double.NaN, Stdev = 0 });
             }
@@ -264,7 +272,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 Stdev = Math.Sqrt(sumVariances / measures.Count)
             };
 
-            var spikeResult = spikeValues.Count == 0
+            HasClearSpikes = spikeEnabled && spikeValues.Count == measures.Count;
+            if (!HasClearSpikes) {
+                SpikeFocusPoints.Clear();
+                MinSpike = MinSpikeStep = 0;
+            }
+            SpikeDisplayStatus = HasClearSpikes ? "HFR + detected spikes" : spikeEnabled ? "Spike detection insufficient · using HFR" : "HFR";
+            var spikeResult = !HasClearSpikes
                 ? new MeasureAndError { Measure = double.NaN, Stdev = 0 }
                 : new MeasureAndError {
                     Measure = SpikeCore.Median(spikeValues),
@@ -480,7 +494,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
 
                 return (new MeasureAndError() { Measure = hfrAvg, Stdev = hfrStdev },
-                        new MeasureAndError() { Measure = spikeResult.Metric, Stdev = spikeResult.Spread });
+                        new MeasureAndError() { Measure = spikeResult.HasClearSpikes ? spikeResult.Metric : double.NaN, Stdev = spikeResult.Spread });
             } else {
                 var analysis = new ContrastDetection();
                 var analysisParams = new ContrastDetectionParams() {
@@ -525,7 +539,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                             "utc,focuserPosition,hfr,hfrStdev,status,usedStars,J,spread,varC,varG,kurtosis," +
                             "measuredAngle,angleStrength,usedAngle," +
                             "spikeAngleDeg,autoAngle,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing," +
-                            "metricKind,uMax,fwhm,separation,dipDepth,profileSnr\n",
+                            "metricKind,uMax,fwhm,separation,dipDepth,profileSnr,clearSpikes\n",
                             Encoding.UTF8);
                     }
 
@@ -561,7 +575,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     sb.Append(r.MedianFwhm.ToString("F6", inv)).Append(',');
                     sb.Append(r.MedianSeparation.ToString("F6", inv)).Append(',');
                     sb.Append(r.MedianDipDepth.ToString("F6", inv)).Append(',');
-                    sb.Append(r.MedianProfileSnr.ToString("F6", inv)).Append('\n');
+                    sb.Append(r.MedianProfileSnr.ToString("F6", inv)).Append(',');
+                    sb.Append(r.HasClearSpikes ? "1" : "0").Append('\n');
 
                     File.AppendAllText(diagPath, sb.ToString(), Encoding.UTF8);
                 }

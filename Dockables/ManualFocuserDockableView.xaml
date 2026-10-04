@@ -202,6 +202,23 @@
                     </Grid>
                 </Grid>
 
+                <Expander Header="Focus star · recommend / GOTO" Margin="0,5,0,0">
+                    <StackPanel Margin="5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Minimum altitude (°)" VerticalAlignment="Center"/>
+                            <TextBox Width="45" Margin="5,0" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}"/>
+                            <Button Content="Refresh stars" Command="{Binding RefreshFocusTargetsCommand}" Padding="6,2"/>
+                        </StackPanel>
+                        <ComboBox Margin="0,5,0,0" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" DisplayMemberPath="Display"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <Button Content="GOTO selected star" Command="{Binding GotoFocusTargetCommand}" Padding="6,2"
+                                    ToolTip="Connect the mount and disconnect the guider. Available when capture, slew and focus operations are idle."/>
+                            <Button Content="Cancel GOTO" Command="{Binding CancelGotoCommand}" Margin="5,0,0,0" Padding="6,2"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding FocusTargetStatus}" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Expander>
+                <TextBlock Text="{Binding SpikeDisplayStatus}" Margin="0,5,0,0"/>
                 <!-- Spike angle. A wrong angle damages the metric more than any other
                      parameter, and it changes whenever the camera is rotated, so it is
                      driven from here rather than from the plugin options tab. -->
@@ -315,6 +332,7 @@
 
                     <oxy:LinearAxis
                     Title="Spike Metric"
+                    IsAxisVisible="{Binding HasSpikePoints}"
                     TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     AxislineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
                     EndPosition="1"
@@ -356,6 +374,7 @@
                         MarkerType="Circle"/>
                     <oxy:ScatterErrorSeries
                         Title="Spike"
+                        Visibility="{Binding HasSpikePoints, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"
                         YAxisKey="SecondaryY"
                         ItemsSource="{Binding SpikeFocusPoints}"
                         MarkerFill="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"

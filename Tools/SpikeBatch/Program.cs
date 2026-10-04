@@ -158,7 +158,7 @@ Example
             var dumps = new List<Diagnostics.FrameDump>();
 
             var csv = new StringBuilder();
-            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle,sigma,hfw,fwhm,separation,dipDepth,profileSnr");
+            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle,sigma,hfw,fwhm,separation,dipDepth,profileSnr,clearSpikes");
 
             var hfrByPos = new List<(int pos, double hfr)>();
             var sw = Stopwatch.StartNew();
@@ -251,7 +251,7 @@ Example
                        .Append(F(r.UsedAngleDeg)).Append(',')
                        .Append(F(r.MedianSigma)).Append(',').Append(F(r.MedianHfw)).Append(',')
                        .Append(F(r.MedianFwhm)).Append(',').Append(F(r.MedianSeparation)).Append(',')
-                       .Append(F(r.MedianDipDepth)).Append(',').Append(F(r.MedianProfileSnr)).AppendLine();
+                       .Append(F(r.MedianDipDepth)).Append(',').Append(F(r.MedianProfileSnr)).Append(',').Append(r.HasClearSpikes ? "1" : "0").AppendLine();
 
                     if (r.IsValid) {
                         v.Points.Add(new Point {

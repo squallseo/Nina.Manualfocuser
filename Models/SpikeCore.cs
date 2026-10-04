@@ -151,6 +151,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double Separation { get; set; } = double.NaN;
         public double DipDepth { get; set; } = double.NaN;
         public double ProfileSnr { get; set; } = double.NaN;
+        public bool HasClearSpike { get; set; }
     }
 
     public sealed class TrackedStar {
@@ -221,6 +222,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         public double UsedAngleDeg { get; init; } = double.NaN;
 
         public List<SpikeStarPoint> StarPoints { get; init; } = new List<SpikeStarPoint>();
+        public bool HasClearSpikes { get; init; }
 
         public bool IsValid => Status == SpikeStatus.Ok && !double.IsNaN(Metric);
         public bool HasAngleEstimate => !double.IsNaN(MeasuredAngleDeg);
@@ -408,6 +410,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     AngleDeg = w.AngleDeg,
                     BoxSizePx = Math.Clamp((int)Math.Round(w.Star.BaseSizePx * 2.0), 12, 120)
                 };
+                point.HasClearSpike = HasExtendedSpike(w.Roi, w.Size, usedAngle, w.OffX, w.OffY);
 
                 // The profile terms are computed for every kind, not just the selected
                 // one: they cost one pass and they are what makes a bad frame
@@ -491,8 +494,56 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 MeasuredAngleDeg = measuredAngle,
                 AngleStrength = measuredStrength,
                 UsedAngleDeg = usedAngle,
-                StarPoints = perStar
+                StarPoints = perStar,
+                HasClearSpikes = status == SpikeStatus.Ok &&
+                    perStar.Count(p => p.HasClearSpike && p.ProfileSnr >= param.minProfileSnr) >= Math.Max(1, param.minUsedStarsForValidFrame)
             };
+        }
+
+        /// <summary>
+        /// Compare a line against parallel strips at the same distance from the
+        /// star. Require extended signal on BOTH sides in three radial bands.
+        /// Circular stars and defocus rings have similar strip brightness and fail.
+        /// This conservative display gate does not change the offline raw metric.
+        /// </summary>
+        public static bool HasExtendedSpike(float[] roi, int size, double angleDeg, double offX = 0, double offY = 0) {
+            if (roi == null || roi.Length != size * size || size < 32 || !double.IsFinite(angleDeg)) return false;
+            double inner = Math.Clamp(size * 0.04, 10, 24);
+            foreach (double length in new[] { 12.0, 24.0, 40.0 }) {
+                double outer = Math.Min(inner + length, size * 0.43);
+                if (outer - inner >= 6 && HasSpikeInBands(roi, size, angleDeg, offX, offY, inner, outer)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasSpikeInBands(float[] roi, int size, double angleDeg, double offX, double offY, double inner, double outer) {
+            double theta = angleDeg * Math.PI / 180;
+            double cs = Math.Cos(theta), sn = Math.Sin(theta);
+            for (int side = -1; side <= 1; side += 2) {
+                for (int band = 0; band < 3; band++) {
+                    var on = new List<double>(); var background = new List<double>();
+                    double start = inner + (outer - inner) * band / 3;
+                    double end = inner + (outer - inner) * (band + 1) / 3;
+                    for (double r = start; r < end; r += 1) {
+                        for (int u = -2; u <= 2; u++) {
+                            foreach (int strip in new[] { 0, -8, 8 }) {
+                                double transverse = u + strip;
+                                int x = (int)Math.Round(size / 2.0 + offX + side * r * cs - transverse * sn);
+                                int y = (int)Math.Round(size / 2.0 + offY + side * r * sn + transverse * cs);
+                                if (x < 0 || x >= size || y < 0 || y >= size) return false;
+                                double value = roi[y * size + x];
+                                if (!double.IsFinite(value)) return false;
+                                if (strip == 0) on.Add(value); else background.Add(value);
+                            }
+                        }
+                    }
+                    if (on.Count == 0) return false;
+                    double signal = Median(on), baseline = Median(background);
+                    double noise = 1.4826 * Median(background.Select(v => Math.Abs(v - baseline)).ToList());
+                    if (signal <= 0 || signal < 2 * Math.Max(1, baseline) || signal - baseline < 5 * Math.Max(1, noise)) return false;
+                }
+            }
+            return true;
         }
 
         // ====================================================

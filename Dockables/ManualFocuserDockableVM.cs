@@ -47,7 +47,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
     /// HFR (and the experimental spike metric) against focuser position.
     /// </summary>
     [Export(typeof(IDockableVM))]
-    public class ManualFocuserDockableVM : DockableVM, IFocuserConsumer, ITelescopeConsumer, ICameraConsumer, IFilterWheelConsumer, IGuiderConsumer, IDisposable {
+    public partial class ManualFocuserDockableVM : DockableVM, IFocuserConsumer, ITelescopeConsumer, ICameraConsumer, IFilterWheelConsumer, IGuiderConsumer, IDisposable {
         private readonly ICameraMediator cameraMediator;
         private readonly IFocuserMediator focuserMediator;
         private readonly IFilterWheelMediator filterWheelMediator;
@@ -68,10 +68,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private bool _capturing = false;
         private bool disposed = false;
 
-        // Only the connection state of the focuser affects CanExecute, so that is the
-        // only transition worth re-querying on. Calling InvalidateRequerySuggested on
-        // every device tick makes WPF re-evaluate every command in the application.
+        // Re-query commands on relevant device transitions, rather than every tick.
         private bool lastFocuserConnected = false;
+        private int lastGotoDeviceState;
 
         public int TargetPosition {
             get => Properties.Settings.Default.TargetPosition;
@@ -115,6 +114,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             set {
                 _moving = value;
                 RaisePropertyChanged(nameof(IsMoving));
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -123,6 +123,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             set {
                 _capturing = value;
                 RaisePropertyChanged(nameof(IsCapturing));
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -150,9 +151,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
         public double MinSpike => this.DataModel.MinSpike;
         public double MinSpikeStep => this.DataModel.MinSpikeStep;
-        public bool HasSpikePoints => this.DataModel.SpikeFocusPoints.Count > 0;
+        public bool HasSpikePoints => IsSpikeMetricEnabled && this.DataModel.HasClearSpikes && this.DataModel.SpikeFocusPoints.Count > 0;
+        public string SpikeDisplayStatus => this.DataModel.SpikeDisplayStatus;
 
-        public bool HasSpikeAngle => !double.IsNaN(this.DataModel.MeasuredSpikeAngle);
+        public bool HasSpikeAngle => this.DataModel.HasClearSpikes && !double.IsNaN(this.DataModel.MeasuredSpikeAngle);
 
         public bool IsSpikeMetricEnabled => Properties.Settings.Default.EnableSpikeMetric;
 
@@ -188,7 +190,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public string MeasuredAngleText {
             get {
                 var m = this.DataModel;
-                return double.IsNaN(m.MeasuredSpikeAngle)
+                return !m.HasClearSpikes || double.IsNaN(m.MeasuredSpikeAngle)
                     ? "not detected"
                     : $"{m.MeasuredSpikeAngle:F1}°  (x{m.MeasuredSpikeAngleStrength:F2})";
             }
@@ -263,6 +265,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             Title = "Manual Focuser";
 
             this.DataModel = new ManualFocuserModel(profileService, imagingMediator, cameraMediator, starDetectionSelector, starAnnotatorSelector);
+            InitializeFocusTargets(profileService);
 
             // Commands are created before consumer registration so that no device
             // callback can fire a CanExecute against half-initialised state.
@@ -275,7 +278,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     SpikeAngle = measured;
                     AutoSpikeAngle = false;
                 }),
-                _ => !double.IsNaN(this.DataModel.MeasuredSpikeAngle));
+                _ => HasSpikeAngle);
 
             ClearChartCommand = new RelayCommand(_ => Guard("Clear chart", () => {
                 this.DataModel.ResetPlotData();
@@ -316,6 +319,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public void Dispose() {
             if (disposed) return;
             disposed = true;
+            try { gotoCts?.Cancel(); } catch { }
 
             // On shutdown cleanup
             try { Cwseo.NINA.ManualFocuser.ManualFocuser.LinearAFRequested -= this.linearAfHandler; } catch { }
@@ -394,6 +398,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ApplyOnUiThread(() => {
                 TelescopeInfo = deviceInfo;
                 RaisePropertyChanged(nameof(TelescopeInfo));
+                RefreshGotoAvailability();
             });
         }
 
@@ -402,6 +407,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ApplyOnUiThread(() => {
                 CameraInfo = deviceInfo;
                 RaisePropertyChanged(nameof(CameraInfo));
+                RefreshGotoAvailability();
             });
         }
 
@@ -418,6 +424,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ApplyOnUiThread(() => {
                 GuiderInfo = deviceInfo;
                 RaisePropertyChanged(nameof(GuiderInfo));
+                RefreshGotoAvailability();
             });
         }
 
@@ -425,7 +432,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         // registered itself with the mediator. CanExecute runs on the dispatcher,
         // so dereferencing it unguarded throws straight into the WPF message loop.
         private bool CanMove() {
-            return FocuserInfo?.Connected == true && !IsMoving;
+            return FocuserInfo?.Connected == true && !IsMoving && !IsGoingToFocusTarget;
         }
 
         private void ResetCts() {
@@ -626,6 +633,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             RaisePropertyChanged(nameof(MinSpike));
             RaisePropertyChanged(nameof(MinSpikeStep));
             RaisePropertyChanged(nameof(HasSpikePoints));
+            RaisePropertyChanged(nameof(SpikeDisplayStatus));
             RaisePropertyChanged(nameof(HasSpikeAngle));
             RaisePropertyChanged(nameof(MeasuredAngleText));
             RaisePropertyChanged(nameof(IsSpikeMetricEnabled));

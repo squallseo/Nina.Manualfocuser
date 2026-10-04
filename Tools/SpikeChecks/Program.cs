@@ -12,6 +12,15 @@ double[] Profile(Func<double, double> f, int radius = 40) =>
 double G(double x, double sigma) => Math.Exp(-x * x / (2 * sigma * sigma));
 var parameters = new SpikeAnalysisParams();
 
+float[] MakeRoi(Func<double, double, double> intensity, int n = 120) {
+    return Enumerable.Range(0, n * n).Select(i => (float)intensity(i % n - n / 2.0, i / n - n / 2.0)).ToArray();
+}
+Check(!SpikeCore.HasExtendedSpike(MakeRoi((x,y) => 10000 * G(Math.Sqrt(x*x+y*y), 4)), 120, 90), "Compact circular star falls back to HFR");
+Check(!SpikeCore.HasExtendedSpike(MakeRoi((x,y) => 1000 * G(Math.Sqrt(x*x+y*y)-30, 4)), 120, 90), "Defocused ring cannot masquerade as an extended spike");
+Check(SpikeCore.HasExtendedSpike(MakeRoi((x,y) => 1000 * G(x, 1.5) * G(y, 60)), 120, 90), "A clear bilateral extended line passes the display gate");
+Check(!SpikeCore.HasExtendedSpike(MakeRoi((x,y) => y > 0 ? 1000 * G(x, 1.5) * G(y, 60) : 0), 120, 90), "One-sided artifact fails the bilateral display gate");
+Check(!SpikeCore.HasExtendedSpike(MakeRoi((x,y) => 1000 * G(x, 1.5) * G(y, 60)), 120, 0), "Wrong configured angle fails the display gate");
+
 var seeds = Enumerable.Range(0, 100).Select(i => new SpikeSeedStar {
     X = i, Y = i, WidthPx = 1, HeightPx = 1, MaxBrightness = 60000
 }).ToList();
