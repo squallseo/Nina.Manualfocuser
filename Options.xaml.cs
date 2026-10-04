@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace Cwseo.NINA.ManualFocuser {
+namespace RTG.ManualFocuser {
     [Export(typeof(ResourceDictionary))]
     partial class Options : ResourceDictionary {
 

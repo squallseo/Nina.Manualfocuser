@@ -18,10 +18,10 @@ using System.Runtime.InteropServices;
 // The following attributes are not required for the plugin per se, but are required by the official manifest meta data
 
 // Your name
-[assembly: AssemblyCompany("cwseo")]
+[assembly: AssemblyCompany("RTG")]
 // The product name that this plugin is part of
 [assembly: AssemblyProduct("manual focuser")]
-[assembly: AssemblyCopyright("Copyright © 2026 cwseo")]
+[assembly: AssemblyCopyright("Copyright © 2026 cwseo and RTG")]
 
 // The minimum Version of N.I.N.A. that this plugin is compatible with
 [assembly: AssemblyMetadata("MinimumApplicationVersion", "3.0.0.2017")]

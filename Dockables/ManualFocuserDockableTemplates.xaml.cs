@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace Cwseo.NINA.ManualFocuser.Dockables {
+namespace RTG.ManualFocuser.Dockables {
     [Export(typeof(ResourceDictionary))]
     public partial class MyPluginDockableTemplates : ResourceDictionary {
         public MyPluginDockableTemplates() {

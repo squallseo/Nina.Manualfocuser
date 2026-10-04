@@ -1,9 +1,9 @@
-﻿<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableView"
+﻿<UserControl x:Class="RTG.ManualFocuser.Dockables.ManualFocuserDockableView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables"
+             xmlns:local="clr-namespace:RTG.ManualFocuser.Dockables"
              xmlns:ninactrl="clr-namespace:NINA.CustomControlLibrary;assembly=NINA.CustomControlLibrary"
              xmlns:enum="clr-namespace:NINA.Core.Enum;assembly=NINA.Core"
              xmlns:ns="clr-namespace:NINA.Core.Locale;assembly=NINA.Core"
@@ -25,26 +25,12 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="5,0,5,0" IsEnabled="{Binding TelescopeInfo.TrackingEnabled}">
+        <Grid Margin="5,0,5,0" IsEnabled="true">
             <Grid.RowDefinitions>
                 <RowDefinition Height="auto" />
                 <RowDefinition/>
             </Grid.RowDefinitions>
             <StackPanel Margin="0,5,0,5" Orientation="Vertical">
-                <!-- 연결 안됨 -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,0" VerticalAlignment="Center" Height="20" IsEnabled="{Binding FocuserInfo.Connected}"
-                    Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource InverseBooleanToVisibilityCollapsedConverter}}">
-                    <TextBlock VerticalAlignment="Center" Text="{ns:Loc LblConnected}" />
-                    <CheckBox Width="20"
-                        Height="20"
-                        Margin="5,0,0,0"
-                        HorizontalAlignment="Left"
-                        BorderBrush="Transparent"
-                        IsChecked="{Binding FocuserInfo.Connected, FallbackValue=False, Mode=OneWay}"
-                        IsEnabled="False"
-                        Style="{StaticResource CheckmarkCheckbox}" />
-                </StackPanel>
-
                 <!--Is Tracking /  -->
                 <Grid VerticalAlignment="Center" Height="25"
                         Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
@@ -83,19 +69,22 @@
                         <TextBlock Margin="10,0,5,0" VerticalAlignment="Center" Text="Expose after focus"/>
                         <CheckBox IsChecked="{Binding TakeShootAfterMove}" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="3">
-                        <!-- MIN HFR -->
-                        <TextBlock Text="MIN (Position, HFR) = ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding MinStep}"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding MinHFR, StringFormat=F3}"/>
-                        <TextBlock Text=")" />
-                        <TextBlock Text=", Delta= ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding StepDelta}" FontWeight="Bold"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding HFRDelta, StringFormat=F3}" FontWeight="Bold"/>
-                        <TextBlock Text=")" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="3" IsEnabled="{Binding CameraInfo.Connected}">
+                        <TextBlock Margin="10,0,5,0" VerticalAlignment="Center" Text="One Pass"/>
+                        <CheckBox IsChecked="{Binding UseOnePass}" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
                     </StackPanel>
+                    <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                        <ninactrl:CancellableButton
+                            Command="{Binding LinearAFCommand}"
+                            MinWidth="70"
+                            ButtonText="LinearAF"
+                            ToolTip="Runs Linear AF"
+                            CancelButtonImage="{StaticResource CancelSVG}"
+                            CancelCommand="{Binding HaltFocuserCommand}"
+                            CancelToolTip="{ns:Loc LblCancel}"
+                            HorizontalContentAlignment="Left">
+                        </ninactrl:CancellableButton>
+                    </Grid>
                 </Grid>
                 <!-- GO/IN/OUT -->
                 <Grid Height="25" Margin="0,5,5,0"
@@ -182,15 +171,54 @@
                             HorizontalContentAlignment="Center">
                         </ninactrl:CancellableButton>
                     </Grid>
-                <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                    <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
                         <ninactrl:CancellableButton
                             Command="{Binding ClearChartCommand}"
                             MinWidth="70"
                             ButtonText="Clear All"
                             ToolTip="Clear all points"
-                            HorizontalContentAlignment="Center">
+                            HorizontalContentAlignment="Left">
                         </ninactrl:CancellableButton>
                     </Grid>
+                </Grid>
+                <!-- Linear AF -->
+                <Grid Height="25" Margin="0,5,5,0"
+                            Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="auto"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <!-- Target + GO -->
+                    <Grid Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="0" Height="25">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="350"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="0">
+                        <!-- MIN HFR -->
+                        <TextBlock Text="MAX (Position, HFR) = ("/>
+                        <TextBlock Margin="0,0,0,0" Text="{Binding MaxStep}"/>
+                        <TextBlock Text="," />
+                        <TextBlock Margin="5,0,0,0" Text="{Binding MaxHFR, StringFormat=F3}"/>
+                        <TextBlock Text=")" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="1" Grid.ColumnSpan="2">
+                        <!-- MIN HFR -->
+                        <TextBlock Text="MIN (Position, HFR) = ("/>
+                        <TextBlock Margin="0,0,0,0" Text="{Binding MinStep}"/>
+                        <TextBlock Text="," />
+                        <TextBlock Margin="5,0,0,0" Text="{Binding MinHFR, StringFormat=F3}"/>
+                        <TextBlock Text=")" />
+                        <TextBlock Text=", Delta= ("/>
+                        <TextBlock Margin="0,0,0,0" Text="{Binding StepDelta}" FontWeight="Bold"/>
+                        <TextBlock Text="," />
+                        <TextBlock Margin="5,0,0,0" Text="{Binding HFRDelta, StringFormat=F3}" FontWeight="Bold"/>
+                        <TextBlock Text=")" />
+                    </StackPanel>
                 </Grid>
             </StackPanel>
             <oxy:Plot
@@ -200,7 +228,7 @@
                 PlotAreaBorderColor="{Binding Path=Color, Source={StaticResource BorderBrush}}">
                 <oxy:Plot.Legends>
                     <oxy:Legend
-                        IsLegendVisible="False"
+                        IsLegendVisible="True"
                         LegendBackground="{Binding Path=Color, Source={StaticResource BackgroundBrush}}"
                         LegendBorder="{Binding Path=Color, Source={StaticResource BorderBrush}}"
                         LegendFontSize="12"
@@ -211,7 +239,7 @@
                         LegendPosition="TopCenter"
                         LegendSymbolLength="10"
                         LegendTextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" />
-                </oxy:Plot.Legends>                
+                </oxy:Plot.Legends>
                 <oxy:Plot.Axes>
                     <oxy:LinearAxis
                         Title="Average HFR"
@@ -247,11 +275,55 @@
                 </oxy:Plot.Axes>
                 <oxy:Plot.Series>
                     <oxy:ScatterErrorSeries
-                        Title="HRF History"
+                        Title="HFR History"
                         ItemsSource="{Binding ManualFocusPoints}" 
                         MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                        MarkerSize="4"
-                        MarkerType="Circle"/>
+                        MarkerSize="3"
+                        MarkerType="Diamond"
+                        TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
+                    <!-- Primary pass (coarse) -->
+                    <oxy:ScatterSeries Title="Points (Pass 0)"
+                                       ItemsSource="{Binding PlotFocusPointsPrimary}"
+                                       DataFieldX="X"
+                                       DataFieldY="Y"
+                                       MarkerType="Circle"
+                                       MarkerFill="Blue"
+                                       MarkerStroke="DarkBlue"
+                                       MarkerSize="5"
+                                       MarkerStrokeThickness="1"
+                                       TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
+
+                    <oxy:LineSeries Title="Fit (Pass 0)"
+                                    ItemsSource="{Binding FitCurvePointsPrimary}"
+                                    DataFieldX="X"
+                                    DataFieldY="Y"
+                                    Color="Blue"
+                                    StrokeThickness="1.5"
+                                    LineStyle="Solid"
+                                    CanTrackerInterpolatePoints="True"
+                                    TrackerFormatString="Fit (P0)\nPos: {2:0}\nHFR: {4:0.000}" />
+
+                    <!-- Secondary pass (fine) -->
+                    <oxy:ScatterSeries Title="Points (Pass 1)"
+                                       ItemsSource="{Binding PlotFocusPointsSecondary}"
+                                       DataFieldX="X"
+                                       DataFieldY="Y"
+                                       MarkerType="Square"
+                                       MarkerFill="Firebrick"
+                                       MarkerStroke="DarkRed"
+                                       MarkerSize="5"
+                                       MarkerStrokeThickness="1"
+                                       TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
+
+                    <oxy:LineSeries Title="Fit (Pass 1)"
+                                    ItemsSource="{Binding FitCurvePointsSecondary}"
+                                    DataFieldX="X"
+                                    DataFieldY="Y"
+                                    Color="Firebrick"
+                                    StrokeThickness="1.5"
+                                    LineStyle="Dash"
+                                    CanTrackerInterpolatePoints="True"
+                                    TrackerFormatString="Fit (P1)\nPos: {2:0}\nHFR: {4:0.000}" />
                 </oxy:Plot.Series>
                 <oxy:Plot.Annotations>
                     <oxy:PointAnnotation
