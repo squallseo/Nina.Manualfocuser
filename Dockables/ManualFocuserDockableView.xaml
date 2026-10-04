@@ -78,35 +78,7 @@
                 <RowDefinition Height="260"/>
             </Grid.RowDefinitions>
             <StackPanel>
-                <Border Style="{StaticResource FocusCard}">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="Focus star" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBlock Text="Alt ≥" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
-                                <TextBox Width="38" MinHeight="26" VerticalContentAlignment="Center" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}" ToolTip="Minimum star altitude; refresh after changing this value."/>
-                                <TextBlock Text="°" VerticalAlignment="Center" Margin="3,0,0,0"/>
-                            </StackPanel>
-                        </Grid>
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <ComboBox MinHeight="28" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" MaxDropDownHeight="240"
-                                      ToolTip="Select a focus star. The list loads automatically when this panel opens.">
-                                <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis"/></DataTemplate></ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshFocusTargetsCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" ToolTip="Refresh visible focus stars using the current time and profile location."/>
-                            <Button Grid.Column="2" Content="GOTO" Command="{Binding GotoFocusTargetCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
-                                    ToolTip="Go to the selected star. Connect and unpark the mount; disconnect the guider. Capture and focus operations must be idle."/>
-                        </Grid>
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding FocusTargetStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding FocusTargetStatus}" Foreground="{StaticResource SecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="Stop GOTO" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
-                                    Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                <local:FocusCardsPanel>
                 <Border Style="{StaticResource FocusCard}">
                     <StackPanel>
                         <Grid>
@@ -155,6 +127,36 @@
                         </Expander>
                     </StackPanel>
                 </Border>
+                <Border Grid.Row="1" Style="{StaticResource FocusCard}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Focus star" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Alt ≥" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
+                                <TextBox Width="38" MinHeight="26" VerticalContentAlignment="Center" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}" ToolTip="Minimum star altitude; refresh after changing this value."/>
+                                <TextBlock Text="°" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <ComboBox MinHeight="28" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" MaxDropDownHeight="240"
+                                      ToolTip="Select a focus star. The list loads automatically when this panel opens.">
+                                <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis"/></DataTemplate></ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshFocusTargetsCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" ToolTip="Refresh visible focus stars using the current time and profile location."/>
+                            <Button Grid.Column="2" Content="GOTO" Command="{Binding GotoFocusTargetCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
+                                    ToolTip="Go to the selected star. Connect and unpark the mount; disconnect the guider. Capture and focus operations must be idle."/>
+                        </Grid>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding FocusTargetStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding FocusTargetStatus}" Foreground="{StaticResource SecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Stop GOTO" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
+                                    Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                </local:FocusCardsPanel>
                 <WrapPanel Margin="2,0,0,5" ToolTip="{Binding SpikeDisplayStatus}">
                     <TextBlock Text="HFR  " Foreground="{StaticResource SecondaryBrush}"/>
                     <TextBlock Text="{Binding MinHFR, StringFormat=F3}" FontWeight="SemiBold" Margin="0,0,10,0"/>

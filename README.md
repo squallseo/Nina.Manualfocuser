@@ -533,6 +533,8 @@ spike width, and validated on masked focus sweeps before controlling a focuser.
 
 The panel groups star selection and manual movement into separate cards, with
 wrapping controls for narrow docks and buttons that use the host theme colors.
+With at least 560 pixels available, **Focus** is on the left and **Focus star**
+on the right. Narrower docks stack them in the same order.
 The star picker is a collapsed dropdown with always-visible **Refresh** and
 **GOTO** buttons alongside it. Minimum altitude remains in the card header;
 long status text is available as a tooltip. Compact padding, 28-pixel buttons,
