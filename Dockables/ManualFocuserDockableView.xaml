@@ -71,12 +71,12 @@
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="6">
+        <Grid x:Name="LayoutRoot" Margin="6">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="260"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
+            <ScrollViewer x:Name="ControlsScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <local:FocusCardsPanel>
                 <Border Style="{StaticResource FocusCard}">
@@ -167,7 +167,8 @@
                 </local:FocusCardsPanel>
 
             </StackPanel>
-            <Grid Grid.Row="1">
+            </ScrollViewer>
+            <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
                 <Grid Margin="0,0,0,5">
                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -327,5 +328,4 @@
             </oxy:Plot>
             </Grid>
         </Grid>
-    </ScrollViewer>
 </UserControl>

@@ -548,6 +548,10 @@ with the algorithm selector (currently only **Linear scan**), **Run autofocus**,
 and **Single pass**. Changing the selection does not start a run. **Clear chart**
 and the running operation's **Stop focus** button are in the chart toolbar.
 The collapsed **Spike analysis** options are below the **Focus star** picker.
+The chart fills the remaining dock height. Only the controls scroll when the
+dock is short; the plot stays in a finite, star-sized grid row. Layout previews
+at widths 420 and 650 verified that increasing window height by 160 pixels
+increases the chart area by the same amount.
 
 Linear refers to scanning at fixed position intervals, not a straight-line fit.
 Both coarse and fine passes use a weighted quadratic fit. A short, one-sided

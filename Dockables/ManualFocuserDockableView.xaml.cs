@@ -20,6 +20,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class ManualFocuserDockableView : UserControl {
         public ManualFocuserDockableView() {
             InitializeComponent();
+            // Scroll only the controls when the dock is short; keep the chart in
+            // a finite star-sized row so it can fill a larger dock.
+            LayoutRoot.SizeChanged += (_, _) => ControlsScrollViewer.MaxHeight = Math.Max(64, LayoutRoot.ActualHeight - 160);
             Loaded += OnLoaded;
             DataContextChanged += OnDataContextChanged;
         }
