@@ -533,6 +533,13 @@ spike width, and validated on masked focus sweeps before controlling a focuser.
 
 The panel groups star selection and manual movement into separate cards, with
 wrapping controls for narrow docks and buttons that use the host theme colors.
+The star picker is a collapsed dropdown with always-visible **Refresh** and
+**GOTO** buttons alongside it. Minimum altitude remains in the card header;
+long status text is available as a tooltip. Compact padding, 28-pixel buttons,
+and folded autofocus/spike controls leave more space for the chart. Button
+hover background and foreground use NINA's `ButtonBackgroundSelectedBrush`
+and `ButtonForegroundBrush`, following the profile color schema; normal/pressed
+background uses `ButtonBackgroundBrush`.
 The collapsed **Autofocus** section contains a method selector (currently only
 **Linear scan**), **Run autofocus**, and **Single pass**. **Stop focus** is visible
 in the manual controls during movement, including an autofocus run.
