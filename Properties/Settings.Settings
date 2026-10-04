@@ -2,6 +2,9 @@
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="Cwseo.NINA.ManualFocuser.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
+    <Setting Name="SpikeMetric" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Legacy</Value>
+    </Setting>
     <Setting Name="UpdateSettings" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>

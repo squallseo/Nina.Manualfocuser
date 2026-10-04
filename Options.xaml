@@ -25,6 +25,13 @@
                            MaxWidth="320"
                            Text="Experimental focus metric for reflectors with diffraction spikes. It is measured alongside HFR and never replaces it." />
 
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="Metric" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ComboBox Width="130" ItemsSource="{Binding SpikeMetrics}"
+                              SelectedItem="{Binding SelectedSpikeMetric}"
+                              ToolTip="Legacy preserves the original formula. Fwhm measures profile width in pixels.&#x0A;All candidates are experimental; verify visible diffraction spikes before using them." />
+                </StackPanel>
+
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

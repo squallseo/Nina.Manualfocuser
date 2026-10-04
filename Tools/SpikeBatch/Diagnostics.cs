@@ -17,11 +17,12 @@ namespace Cwseo.NINA.ManualFocuser.Tools.SpikeBatch {
 
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        public const int ProfileBins = 121;
+        public const int ProfileBins = 61;
         public const double ProfileUMax = 30.0;
 
         public sealed class FrameDump {
             public int Position;
+            public string FrameName;
             public double Hfr;
             public double AngleDeg;
             public double[] Profile;
@@ -35,28 +36,30 @@ namespace Cwseo.NINA.ManualFocuser.Tools.SpikeBatch {
             double angleDeg,
             int position,
             double hfr,
-            bool writeImages) {
+            bool writeImages,
+            string frameName = null) {
 
             if (!SpikeCore.TryGetDiagnosticRoi(data, width, height, star.X, star.Y, star.BaseSizePx, param,
                                                out float[] roi, out int size, out double offX, out double offY))
                 return null;
 
-            var profile = SpikeCore.ComputeUProfile(roi, size, param, angleDeg, offX, offY, ProfileUMax, ProfileBins);
+            var profile = SpikeCore.BuildUProfile(roi, size, param, angleDeg, offX, offY, (int)ProfileUMax);
+            string suffix = frameName == null ? position.ToString(Inv) : $"{position}_{frameName}";
 
             if (writeImages) {
                 Directory.CreateDirectory(dir);
-                WriteStretched(Path.Combine(dir, $"roi_{position}.png"), roi, size, size, 0.995);
+                WriteStretched(Path.Combine(dir, $"roi_{suffix}.png"), roi, size, size, 0.995);
 
                 // The spike sits a few tenths of a percent of the core brightness, far
                 // below anything a percentile of the (mostly background) ROI can reach.
                 // Scaling logarithmically against the peak is what makes it visible.
-                WriteLog(Path.Combine(dir, $"deep_{position}.png"), roi, size, size, 2e-3);
+                WriteLog(Path.Combine(dir, $"deep_{suffix}.png"), roi, size, size, 2e-3);
 
                 var rotated = Rotate(roi, size, angleDeg, offX, offY, out int rw, out int rh);
-                WriteLog(Path.Combine(dir, $"rot_{position}.png"), rotated, rw, rh, 2e-3);
+                WriteLog(Path.Combine(dir, $"rot_{suffix}.png"), rotated, rw, rh, 2e-3);
             }
 
-            return new FrameDump { Position = position, Hfr = hfr, AngleDeg = angleDeg, Profile = profile };
+            return new FrameDump { Position = position, FrameName = frameName, Hfr = hfr, AngleDeg = angleDeg, Profile = profile };
         }
 
         /// <summary>
@@ -134,12 +137,12 @@ namespace Cwseo.NINA.ManualFocuser.Tools.SpikeBatch {
         public static void WriteProfileCsv(string path, List<FrameDump> dumps) {
             var sb = new StringBuilder();
             sb.Append("u");
-            foreach (var d in dumps.OrderBy(d => d.Position)) sb.Append(',').Append(d.Position.ToString(Inv));
+            foreach (var d in dumps.OrderBy(d => d.Position)) sb.Append(',').Append(d.FrameName ?? d.Position.ToString(Inv));
             sb.AppendLine();
 
             var ordered = dumps.OrderBy(d => d.Position).ToList();
             for (int b = 0; b < ProfileBins; b++) {
-                double u = -ProfileUMax + (b + 0.5) * (2 * ProfileUMax / ProfileBins);
+                double u = b - ProfileUMax;
                 sb.Append(u.ToString("F2", Inv));
                 foreach (var d in ordered) sb.Append(',').Append(d.Profile[b].ToString("F2", Inv));
                 sb.AppendLine();

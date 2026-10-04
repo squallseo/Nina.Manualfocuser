@@ -5,11 +5,14 @@ description: Build, deploy, verify and safely integrate this N.I.N.A. plugin. Us
 
 # Working on this N.I.N.A. plugin
 
-Target: N.I.N.A. 3.x, `net8.0-windows`, MEF-exported plugin. `NINA.Plugin` 3.0.0.2017-beta
-is the only direct package reference; everything else (NINA.Core, NINA.Equipment,
-NINA.Image, NINA.WPF.Base…) arrives transitively.
+Target: N.I.N.A. 3.2.0.9001 or later, `net8.0-windows`, MEF-exported plugin.
+Host packages now use 3.2.0.9001 after integrating upstream Linear AF.
+Preserve the `Cwseo.NINA.ManualFocuser` namespace, assembly name, and plugin GUID.
 
 ## Build, deploy, verify
+
+Use `dotnet build ManualFocuser.csproj -c Release -p:DeployPlugin=false` for
+verification without installing the DLL into the local N.I.N.A. instance.
 
 `dotnet build` runs a PostBuild `xcopy` that deploys the single DLL to
 `%LOCALAPPDATA%\NINA\Plugins\3.0.0\Manual Focuser\`. There is no separate install step.
@@ -99,7 +102,7 @@ zero downstream.
 ## Discovering N.I.N.A. API shape
 
 The packages ship no docs. Dump the surface with `MetadataLoadContext` over
-`~/.nuget/packages/nina.*/3.0.0.2017-beta/lib/net8.0-windows7.0/*.dll`, resolving
+`~/.nuget/packages/nina.*/3.2.0.9001/lib/net8.0-windows7.0/*.dll`, resolving
 against the runtime directory plus the rest of the nuget cache. The same trick works
 on `%LOCALAPPDATA%\NINA\Plugins\3.0.0\HocusFocus\NINA.Joko.Plugins.HocusFocus.dll`
 when checking how another plugin uses an API.

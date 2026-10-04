@@ -32,7 +32,7 @@ The metric is designed to:
 This version removes auxiliary structural penalties (lambda term) to
 keep the formulation minimal and stable.
 
-**Status.** Sections 1 – 10 are the original design. Sections 11 – 14 record what
+**Status.** Sections 1 – 10 are the original design. Sections 11 – 15 record what
 measurement has since shown, including where the design intent and the data
 disagree, and describe the profile based formulation that replaced the pixel
 moment one. Read section 11.1 first: it says which of the two development
@@ -329,11 +329,13 @@ Measured on the four FDK200 frames:
 
 ## 13.1 Open question
 
-`nearGain` cannot be computed from any dataset here, because none of them cover
+At the time of the February/March evaluation, `nearGain` could not be computed
+from those datasets, because none of them cover
 the region near focus. That test is the entire justification for the project —
 HFR flattens into a quadratic minimum near focus while a split separation should
 fall roughly linearly to zero, giving a sharper vertex — and it remains
-unverified.
+unverified. Section 15 adds a September through-focus replay but still does not
+establish an advantage on visible diffraction spikes.
 
 Settling it needs a through-focus sweep from an instrument that shows spikes:
 
@@ -375,6 +377,108 @@ whatever asymmetry the blob happens to have, which is why the strength figure an
 the ROI dump both matter before trusting it.
 
 ------------------------------------------------------------------------
+
+# 15. September 2026 Autofocus Replay (2026-10-04)
+
+The merged branch targets **N.I.N.A. 3.2.0.9001 or later**. Build without deploying
+into the local N.I.N.A. installation with:
+
+```powershell
+dotnet build ManualFocuser.csproj -c Release -p:DeployPlugin=false
+dotnet run --project Tools/SpikeChecks -c Release
+```
+
+## 15.1 Data and limits
+
+Two FDK200/QHY600M autofocus runs under `C:\StellaC\QHY600M\Autofocus` were replayed:
+
+| Run | Attempt frames | Positions | Range | Exposure/filter |
+| --- | ---: | ---: | --- | --- |
+| `AutoFocus_20260910_210248/attempt01` | 36 | 12 | 84894–112394, step 2500 | 1 s / L |
+| `AutoFocus_20260919_220918/attempt01` | 33 | 11 | 84691–109691, step 2500 | 1 s / L |
+
+Each position has three consecutive exposures. Initial and final validation frames
+were kept separate from these attempt sweeps. The `--saved-stars` option reads the
+sibling Hocus Focus Region00 JSON as plain data and uses its whole-field HFR as
+the reference. Spike seeds come from the saved detector list, then track between
+frames; these are a subset of the field stars contributing to HFR.
+
+Log-stretched crops of all five selected stars on the initial attempt frames,
+and brightest-star crops throughout both sweeps, show donuts and compact stars
+without clearly visible diffraction spikes. Consequently these runs test robustness
+and focus-curve behavior, **not the claimed near-focus advantage of diffraction
+spikes**. Their 2500-step sampling is also coarse for that claim. Automatic angle
+estimates remain plausible on these crops and are not evidence that a spike exists.
+
+## 15.2 Changes supported by the replay
+
+- Select the brightest stars **after** rejecting unsuitable shapes/sizes. Previously
+  the brightest fifth could consist entirely of tiny artifacts, starving eligible
+  stars. The original raw-pixel replay of September 19 produced no valid points;
+  the corrected selector produces a complete 33-frame curve.
+- Keep signed background residuals through projection. The earlier ROI subtraction
+  clipped them despite the profile code expecting signed samples. Clipping in the
+  final nonnegative profile can still bias weak-profile moments; this is not a
+  complete solution for Sigma/Hfw.
+- Interpolate the two half-height crossings for subpixel FWHM, and reject truncated,
+  nonfinite or low-SNR profiles. Require a valley at least 10% deep and 3 wing-noise
+  units below the outer peaks before reporting a split.
+- Report current-frame angle evidence separately from the last angle used as an
+  automatic fallback. Failed detections no longer display an old successful angle.
+- Preserve each repeated frame's diagnostic files and use the same one-pixel
+  profile grid as the metric. Report failure rates over all evaluated frames,
+  and add `nearSNRx`, which includes the observed repeated-exposure scatter.
+
+Comparison against the pre-change core at merge commit `218eca5`, with
+`--saved-stars --auto-angle --compare --roi-scale 3.5 --u-max 60`:
+
+| Quantity | September 10: original → updated | September 19: original → updated |
+| --- | --- | --- |
+| FWHM pooled repeat SD, px | 1.6436 → 0.8750 | 0.8528 → 0.6494 |
+| FWHM whole-sweep range/repeat SD | 10.0 → 18.8 | 15.2 → 20.2 |
+| Updated FWHM nearSNRx / HFR | 0.35 | 0.12 |
+| Split-positive evaluated frames | 64% → 25% | 55% → 12% |
+
+September 10 originally selected four stars; the corrected selector selects five.
+Holding that run at four stars gives updated FWHM repeat SD **1.5904 px** (only
+about 3% below the original). Thus the approximately 47% end-to-end reduction
+includes star selection, and must not be attributed solely to interpolation.
+September 19 uses five stars in both versions and improves repeat SD by about 24%.
+Lower scatter does not guarantee better focus-position accuracy: for example the
+September 10 FWHM fitted vertex moves from 97211 to 96806, while Hocus Focus's saved
+final estimate is 97191. September 19's updated FWHM vertex is 98461 versus the
+saved estimate 98652. A parabola is only reported when its minimum lies inside
+the fitted sample range; it is a diagnostic, not a command to move the focuser.
+
+![Original and updated autofocus curves](Images/autofocus-comparison-202609.png)
+
+Both updated FWHM nearSNRx values are below 1. **No improvement over HFR near focus
+has been established.** Legacy also remains unsuitable as a minimum-finding signal
+on these selected stars. Legacy stays the default to avoid silently changing the
+experimental measurement; `Fwhm`, `Split`, `Hfw` and `Hybrid` can now be selected
+in plugin options for explicit experiments. Changing the metric clears the spike
+curve on the next measurement; HFR is preserved. Parameters are held fixed across
+the frames averaged at a position. The plugin's profile half-range remains 40 px;
+the comparison above explicitly overrides it to 60 px in the offline tool.
+
+The older February 18 dataset remains a positive control: with configured 90°,
+updated FWHM increases approximately 9.5, 10.2, 21.1, 37.0 px and resolved split
+separations remain 0, 0, 13, 24 px. Those four frames still do not cross best focus.
+Twenty-three dependency-free checks cover analytic Gaussian widths, subpixel
+response, real double peaks, shallow ripples, invalid profiles, signed background,
+seed starvation, stale angle reporting, and saved-result loading. Offline replay
+does not exercise N.I.N.A. UI loading or real equipment capture.
+
+Reproduce an attempt replay without writing into the original capture folder:
+
+```powershell
+New-Item -ItemType Directory -Force Tools/SpikeBatch/bin/analysis | Out-Null
+dotnet run --project Tools/SpikeBatch -c Release -- `
+  "C:\StellaC\QHY600M\Autofocus\AutoFocus_20260919_220918\attempt01" `
+  --saved-stars --auto-angle --compare --roi-scale 3.5 --u-max 60 `
+  --dump Tools/SpikeBatch/bin/analysis/sep19 --dump-stars 5 `
+  --out Tools/SpikeBatch/bin/analysis/sep19.csv
+```
 
 End of Document
 

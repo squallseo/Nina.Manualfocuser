@@ -99,6 +99,21 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
+        public IEnumerable<SpikeMetricKind> SpikeMetrics { get; } = new[] {
+            SpikeMetricKind.Legacy, SpikeMetricKind.Fwhm, SpikeMetricKind.Split,
+            SpikeMetricKind.Hfw, SpikeMetricKind.Hybrid
+        };
+
+        public SpikeMetricKind SelectedSpikeMetric {
+            get => Models.ManualFocuserModel.BuildSpikeParams().metricKind;
+            set {
+                if (!SpikeMetrics.Contains(value)) return;
+                Settings.Default.SpikeMetric = value.ToString();
+                Settings.Default.Save();
+                RaisePropertyChanged();
+            }
+        }
+
         public double RoiScale {
             get => Properties.Settings.Default.RoiScale;
             set {

@@ -29,6 +29,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private readonly IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector;
 
         private SpikeTrackingState trackingState = null;
+        private SpikeMetricKind? plottedSpikeMetric;
 
         public double HFRDelta { get; set; }
         public double StepDelta { get; set; }
@@ -195,6 +196,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             // Star tracking must restart with the plot, otherwise a new run keeps
             // chasing stars seeded in the previous one.
             trackingState = null;
+            plottedSpikeMetric = null;
 
             ArrowPoint.Clear();
             ArrowPoint.Add(new DataPoint(0, 0));
@@ -215,6 +217,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             int frames = Math.Max(1, exposuresPerFocusPoint);
             var measures = new List<(MeasureAndError hfr, MeasureAndError spike)>(frames);
+            var spikeParams = BuildSpikeParams();
+            bool spikeEnabled = Properties.Settings.Default.EnableSpikeMetric;
+            if (plottedSpikeMetric != spikeParams.metricKind) {
+                // Different metrics have different units; do not combine them
+                // into one curve when the user changes the selection.
+                SpikeFocusPoints.Clear();
+                MinSpike = MinSpikeStep = 0;
+                plottedSpikeMetric = spikeParams.metricKind;
+            }
 
             for (int i = 0; i < frames; i++) {
                 token.ThrowIfCancellationRequested();
@@ -225,7 +236,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     continue;
                 }
 
-                measures.Add(await EvaluateExposure(image, focuserPosition, token, progress));
+                measures.Add(await EvaluateExposure(image, focuserPosition, spikeParams, spikeEnabled, token, progress));
             }
 
             if (measures.Count == 0) {
@@ -345,7 +356,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
         public static SpikeAnalysisParams BuildSpikeParams() {
             var s = Properties.Settings.Default;
+            var kind = Enum.TryParse<SpikeMetricKind>(s.SpikeMetric, out var parsed) && Enum.IsDefined(parsed)
+                ? parsed : SpikeMetricKind.Legacy;
             return new SpikeAnalysisParams {
+                metricKind = kind,
                 roiScale = s.RoiScale,
                 bgRingFraction = s.BgRingFraction,
                 minStarSizePx = s.MinStarSizePx,
@@ -369,10 +383,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private async Task<(MeasureAndError hfr, MeasureAndError spike)> EvaluateExposure(
             IExposureData exposureData,
             int focuserPosition,
+            SpikeAnalysisParams spikeParam,
+            bool spikeEnabled,
             CancellationToken token,
             IProgress<ApplicationStatus> progress) {
 
             Logger.Trace("Evaluating Exposure");
+            MeasuredSpikeAngle = double.NaN;
+            MeasuredSpikeAngleStrength = 0;
+            SpikeAngleIsAuto = spikeParam.autoSpikeAngle;
 
             var imageData = await exposureData.ToImageData(progress, token);
 
@@ -433,19 +452,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 // Spike analysis is read-only with respect to analysisResult.
                 var spikeResult = SpikeFrameResult.Failed(SpikeStatus.Disabled);
-                if (Properties.Settings.Default.EnableSpikeMetric) {
+                if (spikeEnabled) {
                     try {
-                        var spikeParam = BuildSpikeParams();
                         spikeResult = SpikeAnalyzer.Evaluate(imageData, spikeParam, analysisResult, ref trackingState);
 
-                        if (spikeResult.HasAngleEstimate) {
-                            MeasuredSpikeAngle = spikeResult.MeasuredAngleDeg;
-                            MeasuredSpikeAngleStrength = spikeResult.AngleStrength;
-                        }
-                        SpikeAngleIsAuto = spikeParam.autoSpikeAngle;
+                        MeasuredSpikeAngle = spikeResult.MeasuredAngleDeg;
+                        MeasuredSpikeAngleStrength = spikeResult.AngleStrength;
 
                         SpikeAnalyzer.LogFrame("frame", focuserPosition, spikeResult);
-                        WriteDiagnosticsRow(focuserPosition, hfrAvg, hfrStdev, spikeResult);
+                        WriteDiagnosticsRow(focuserPosition, hfrAvg, hfrStdev, spikeResult, spikeParam);
                     } catch (Exception e) {
                         // A failure in the experimental metric must never take down a
                         // focus run, let alone the host application.
@@ -495,7 +510,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private static readonly object diagLock = new object();
         private string diagPath;
 
-        private void WriteDiagnosticsRow(int focuserPosition, double hfr, double hfrStdev, SpikeFrameResult r) {
+        private void WriteDiagnosticsRow(int focuserPosition, double hfr, double hfrStdev, SpikeFrameResult r, SpikeAnalysisParams p) {
             if (!Properties.Settings.Default.WriteSpikeDiagnostics) return;
 
             try {
@@ -509,11 +524,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                         File.AppendAllText(diagPath,
                             "utc,focuserPosition,hfr,hfrStdev,status,usedStars,J,spread,varC,varG,kurtosis," +
                             "measuredAngle,angleStrength,usedAngle," +
-                            "spikeAngleDeg,autoAngle,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing\n",
+                            "spikeAngleDeg,autoAngle,tau,coreReject,axisSigma,axisReject,betaVar,betaSplit,splitPower,roiScale,bgRing," +
+                            "metricKind,uMax,fwhm,separation,dipDepth,profileSnr\n",
                             Encoding.UTF8);
                     }
 
-                    var s = Properties.Settings.Default;
                     var inv = CultureInfo.InvariantCulture;
                     var sb = new StringBuilder();
                     sb.Append(DateTime.UtcNow.ToString("o", inv)).Append(',');
@@ -530,17 +545,23 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     sb.Append(r.MeasuredAngleDeg.ToString("F2", inv)).Append(',');
                     sb.Append(r.AngleStrength.ToString("F3", inv)).Append(',');
                     sb.Append(r.UsedAngleDeg.ToString("F2", inv)).Append(',');
-                    sb.Append(s.spikeAngleDeg.ToString(inv)).Append(',');
-                    sb.Append(s.AutoSpikeAngle ? "1" : "0").Append(',');
-                    sb.Append(s.CoreSigmaPx.ToString(inv)).Append(',');
-                    sb.Append(s.CoreRejectSigmaPx.ToString(inv)).Append(',');
-                    sb.Append(s.AxisSigmaPx.ToString(inv)).Append(',');
-                    sb.Append(s.AxisRejectSigmaPx.ToString(inv)).Append(',');
-                    sb.Append(s.BetaVar.ToString(inv)).Append(',');
-                    sb.Append(s.BetaSplit.ToString(inv)).Append(',');
-                    sb.Append(s.SplitPower.ToString(inv)).Append(',');
-                    sb.Append(s.RoiScale.ToString(inv)).Append(',');
-                    sb.Append(s.BgRingFraction.ToString(inv)).Append('\n');
+                    sb.Append(p.spikeAngleDeg.ToString(inv)).Append(',');
+                    sb.Append(p.autoSpikeAngle ? "1" : "0").Append(',');
+                    sb.Append(p.coreSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(p.coreRejectSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(p.axisSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(p.axisRejectSigmaPx.ToString(inv)).Append(',');
+                    sb.Append(p.betaVar.ToString(inv)).Append(',');
+                    sb.Append(p.betaSplit.ToString(inv)).Append(',');
+                    sb.Append(p.splitPower.ToString(inv)).Append(',');
+                    sb.Append(p.roiScale.ToString(inv)).Append(',');
+                    sb.Append(p.bgRingFraction.ToString(inv)).Append(',');
+                    sb.Append(p.metricKind).Append(',');
+                    sb.Append(p.uMaxPx.ToString(inv)).Append(',');
+                    sb.Append(r.MedianFwhm.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianSeparation.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianDipDepth.ToString("F6", inv)).Append(',');
+                    sb.Append(r.MedianProfileSnr.ToString("F6", inv)).Append('\n');
 
                     File.AppendAllText(diagPath, sb.ToString(), Encoding.UTF8);
                 }

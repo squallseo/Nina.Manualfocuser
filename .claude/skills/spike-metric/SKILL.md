@@ -131,7 +131,32 @@ Other traps, all confirmed:
 
 ## What is open
 
-**The near-focus test has never been run.** No dataset here covers the region where
+The 2026-10-04 replay is documented in README section 15. The two FDK200/QHY600M
+attempts under `C:\StellaC\QHY600M\Autofocus` contain 36 and 33 frames, at 2500-step
+positions with three exposures each. Selected-star crops show no clearly visible
+spikes. Use `--saved-stars` to load sibling Hocus Focus JSON seeds and whole-field
+HFR; this is a different HFR reference from the offline tracked-star estimate.
+Keep initial/final validation frames separate. Write outputs under `bin/analysis/`.
+
+FWHM now uses interpolated crossings and rejects truncated/low-SNR profiles; split
+requires a 10% valley and 3 noise units. Signed ROI residuals are preserved. Legacy
+remains the default, with explicit candidate selection available in plugin options.
+The original September 10 selector used four stars; the correction uses five, so
+report that change when attributing the 47% end-to-end repeat-SD reduction. Holding
+four stars fixed yields only about a 3% reduction. September 19 uses five in both
+versions and reduces FWHM repeat SD about 24%. Near-focus noise-normalized gains
+remain below HFR (0.35 and 0.12), so this is not evidence of a spike advantage.
+Automatic angles can still look credible on these spikeless selected-star crops.
+
+`dotnet run --project Tools/SpikeChecks -c Release` exercises the shared core's
+analytic widths, split rejection, signed residuals, seed eligibility and stale angle
+reporting. `nearSNRx` uses repeated-exposure noise; `failFrac` now includes dropped
+evaluations. A zero-median Split contrast is undefined, not zero. ROI exports use
+unique frame identifiers and one-pixel profiles; `--dump-stars` inspects more than
+the brightest selected star. Inspect crops before drawing optical conclusions.
+
+**A validated near-focus diffraction-spike test has never been run.** The original
+February/March datasets do not cover the region where
 the two lines merge. Until a through-focus sweep from a spiked instrument exists,
 `nearGain` is blank and the project's central claim is unverified.
 

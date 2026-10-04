@@ -99,6 +99,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         /// <summary>A local maximum must reach this fraction of the peak to count.</summary>
         public double peakThresholdFraction { get; set; } = 0.35;
 
+        /// <summary>Minimum valley depth and noise significance for a real split.</summary>
+        public double minSplitDipDepth { get; set; } = 0.10;
+        public double minSplitSignificance { get; set; } = 3.0;
+        public double minProfileSnr { get; set; } = 5.0;
+
         // Tracking / centroid refinement
         public bool enableCentroidTracking { get; set; } = true;
         public int centroidWindowPx { get; set; } = 17;        // odd recommended
@@ -260,16 +265,12 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private static List<SpikeSeedStar> SelectSeeds(IReadOnlyList<SpikeSeedStar> list, SpikeAnalysisParams param) {
             if (list == null || list.Count == 0) return new List<SpikeSeedStar>();
 
-            int topN = Math.Max(1, list.Count / 5);
-            double brightThreshold = list
-                .OrderByDescending(s => s.MaxBrightness)
-                .Take(topN)
-                .Last()
-                .MaxBrightness;
-
+            // Rank eligible stars only. Bright hot pixels, elongated artifacts or
+            // tiny detections must not exclude every usable star from the top fifth.
             return list
                 .Where(s =>
-                    s.MaxBrightness >= brightThreshold &&
+                    s != null && double.IsFinite(s.X) && double.IsFinite(s.Y) &&
+                    double.IsFinite(s.MaxBrightness) && s.MaxBrightness > 0 &&
                     s.WidthPx >= param.minStarSizePx &&
                     s.HeightPx >= param.minStarSizePx &&
                     Math.Abs(s.WidthPx - s.HeightPx) <= Math.Min(s.WidthPx, s.HeightPx) * 0.5)
@@ -364,8 +365,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             // ---------- frame orientation ----------
             var usable = work.Where(w => !double.IsNaN(w.AngleDeg) && w.AngleStrength >= param.angleMinStrength).ToList();
 
-            double measuredAngle = state.LastAngleDeg;
-            double measuredStrength = state.LastAngleStrength;
+            // Report evidence from this frame only; a previous estimate must not
+            // look like a successful detection on a frame containing only noise.
+            double measuredAngle = double.NaN;
+            double measuredStrength = 0;
 
             // Median across stars, not across frames. Averaging over frames was tried
             // and measured worse: a focus sweep spans states where the orientation is
@@ -380,7 +383,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             }
 
             double usedAngle = param.spikeAngleDeg;
-            if (param.autoSpikeAngle && !double.IsNaN(measuredAngle)) usedAngle = measuredAngle;
+            if (param.autoSpikeAngle && !double.IsNaN(state.LastAngleDeg)) usedAngle = state.LastAngleDeg;
 
             // ---------- pass 2: metric ----------
             var metrics = new List<double>(work.Count);
@@ -594,7 +597,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
         public static bool TryComputeProfileTerms(double[] profile, SpikeAnalysisParams param, out ProfileTerms terms) {
             terms = default;
-            if (profile == null || profile.Length < 9) return false;
+            if (profile == null || profile.Length < 9 || profile.Any(v => !double.IsFinite(v))) return false;
+            param ??= new SpikeAnalysisParams();
 
             int bins = profile.Length;
             int uMax = (bins - 1) / 2;
@@ -614,9 +618,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 p[i] = Math.Max(0, profile[i] - baseline);
                 if (p[i] > peak) peak = p[i];
             }
-            if (peak <= 0) return false;
+            if (peak <= 0 || !double.IsFinite(peak)) return false;
 
             double snr = peak / noise;
+            if (snr < param.minProfileSnr) return false;
 
             double w = 0, wu = 0;
             for (int i = 0; i < bins; i++) { w += p[i]; wu += p[i] * (i - uMax); }
@@ -651,7 +656,12 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             int lo = 0, hi = bins - 1;
             while (lo < bins && sm[lo] < half) lo++;
             while (hi >= 0 && sm[hi] < half) hi--;
-            double fwhm = hi > lo ? hi - lo + 1 : 1;
+            // The half-height must be crossed on both sides inside the ROI.
+            // Interpolation avoids an integer-pixel plateau around best focus.
+            if (lo == 0 || hi == bins - 1 || hi < lo) return false;
+            double left = lo - 1 + (half - sm[lo - 1]) / (sm[lo] - sm[lo - 1]);
+            double right = hi + (sm[hi] - half) / (sm[hi] - sm[hi + 1]);
+            double fwhm = right - left;
 
             // --- peaks and the dip between them ---
             double peakThreshold = smPeak * Math.Clamp(param.peakThresholdFraction, 0.05, 0.95);
@@ -665,12 +675,20 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double dip = 0;
             if (peaks.Count >= 2) {
                 int first = peaks[0], last = peaks[peaks.Count - 1];
-                separation = last - first;
-
                 double valley = double.MaxValue;
                 for (int i = first; i <= last; i++) valley = Math.Min(valley, sm[i]);
                 double outer = Math.Min(sm[first], sm[last]);
-                if (outer > 0) dip = Math.Clamp(1.0 - valley / outer, 0, 1);
+                if (outer > 0) {
+                    double candidateDip = Math.Clamp(1.0 - valley / outer, 0, 1);
+                    // Shallow ripples in a single broadened line are not a split.
+                    // Compare to raw wing noise conservatively, without assuming
+                    // neighboring smoothed bins are independent.
+                    if (candidateDip >= param.minSplitDipDepth &&
+                        outer - valley >= param.minSplitSignificance * noise) {
+                        separation = last - first;
+                        dip = candidateDip;
+                    }
+                }
             }
 
             terms = new ProfileTerms(sigma, hfw, fwhm, separation, dip, peaks.Count, snr);
@@ -972,7 +990,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             float bg = MedianF(samples);
             for (int i = 0; i < roi.Length; i++)
-                roi[i] = Math.Max(0f, roi[i] - bg);
+                // Preserve signed noise until projection; clipping here creates
+                // a pedestal that makes profile widths grow as the star fades.
+                roi[i] -= bg;
         }
 
         // ====================================================

@@ -43,6 +43,12 @@ Options
   --limit <n>             only process the first n frames
   --seed-frame <n>        frame index used to seed the star list (default 0)
   --reseed                re-detect stars on every frame instead of tracking
+  --saved-stars           use sibling Hocus Focus Region00 JSON seeds and HFR
+  --compare               compare all metric kinds on identical input frames
+  --metric <kind>         legacy, sigma, hfw, fwhm, split, or hybrid
+  --u-max <px>            half-range of the profile (default 40)
+  --dump <folder>         save per-frame ROI images and one-pixel profiles
+  --dump-stars <n>        dump this many tracked stars (default 1)
   --auto-angle            measure the spike orientation per frame and use it
                           instead of --angle (it is measured and reported either way)
   --peak-sigma <v>        star detection threshold in sigma above background (default 40)
@@ -83,6 +89,7 @@ Example
             public SpikeAnalysisParams Params;
             public SpikeTrackingState State;
             public List<Point> Points = new List<Point>();
+            public List<SpikeFrameResult> Frames = new List<SpikeFrameResult>();
         }
 
         private static int Run(string[] args) {
@@ -141,6 +148,8 @@ Example
 
             string outPath = opt.GetS("out", Path.Combine(folder, "spike-batch.csv"));
             bool reseed = opt.Flags.Contains("reseed");
+            bool savedStars = opt.Flags.Contains("saved-stars");
+            Console.WriteLine("HFR source  : " + (savedStars ? "saved Hocus Focus result (whole field)" : "offline tracked-star reference"));
             int seedFrame = (int)opt.GetD("seed-frame", 0);
             double peakSigma = opt.GetD("peak-sigma", 40);
             int maxSeedStars = (int)opt.GetD("max-seed-stars", 400);
@@ -149,7 +158,7 @@ Example
             var dumps = new List<Diagnostics.FrameDump>();
 
             var csv = new StringBuilder();
-            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle");
+            csv.AppendLine("file,focpos,variant,status,usedStars,J,spread,varC,varG,kurtosis,hfr,hfrStdev,measuredAngle,angleStrength,usedAngle,sigma,hfw,fwhm,separation,dipDepth,profileSnr");
 
             var hfrByPos = new List<(int pos, double hfr)>();
             var sw = Stopwatch.StartNew();
@@ -178,21 +187,24 @@ Example
 
                 int pos = FitsImage.FocuserPosition(img.Header) ?? idx;
                 var bg = StarFinder.EstimateBackground(img.Data);
+                var saved = savedStars ? SavedDetection.LoadForFrame(file) : null;
 
                 if (!seeded || reseed) {
-                    var seeds = StarFinder.Find(img.Data, img.Width, img.Height, bg,
+                    var seeds = saved?.Stars ?? StarFinder.Find(img.Data, img.Width, img.Height, bg,
                                                 peakSigma: peakSigma, maxStars: maxSeedStars);
                     if (seeds.Count == 0) {
                         Console.Error.WriteLine($"  {name}: no seed stars found");
-                        continue;
                     }
 
                     foreach (var v in variants) v.State = SpikeCore.CreateTrackingState(seeds, v.Params);
 
                     if (!seeded) {
-                        seeded = true;
+                        seeded = variants.Any(v => v.State != null);
                         ReportSeed(img, bg, seeds, variants[0]);
                     }
+                }
+                if (!seeded) {
+                    Console.Error.WriteLine($"  {name}: no eligible seed stars; retrying on the next frame");
                 }
 
                 bool firstEvaluated = processed == 0;
@@ -200,7 +212,11 @@ Example
                 // ---- HFR reference over the tracked stars ----
                 double hfrAvg = double.NaN, hfrStd = 0;
                 var refState = variants[0].State;
-                if (refState?.TrackedStars != null && refState.TrackedStars.Count > 0) {
+                if (saved != null) {
+                    hfrAvg = saved.Hfr;
+                    hfrStd = saved.HfrStdDev;
+                    if (double.IsFinite(hfrAvg) && hfrAvg > 0) hfrByPos.Add((pos, hfrAvg));
+                } else if (refState?.TrackedStars != null && refState.TrackedStars.Count > 0) {
                     var hfrs = new List<double>();
                     foreach (var t in refState.TrackedStars) {
                         double h = StarFinder.ComputeHFR(img.Data, img.Width, img.Height, t.X, t.Y,
@@ -216,6 +232,7 @@ Example
 
                 foreach (var v in variants) {
                     var r = SpikeCore.Evaluate(img.Data, img.Width, img.Height, v.Params, v.State);
+                    v.Frames.Add(r);
 
                     csv.Append(Csv(name)).Append(',')
                        .Append(pos.ToString(Inv)).Append(',')
@@ -231,7 +248,10 @@ Example
                        .Append(F(hfrStd)).Append(',')
                        .Append(F(r.MeasuredAngleDeg)).Append(',')
                        .Append(F(r.AngleStrength)).Append(',')
-                       .Append(F(r.UsedAngleDeg)).AppendLine();
+                       .Append(F(r.UsedAngleDeg)).Append(',')
+                       .Append(F(r.MedianSigma)).Append(',').Append(F(r.MedianHfw)).Append(',')
+                       .Append(F(r.MedianFwhm)).Append(',').Append(F(r.MedianSeparation)).Append(',')
+                       .Append(F(r.MedianDipDepth)).Append(',').Append(F(r.MedianProfileSnr)).AppendLine();
 
                     if (r.IsValid) {
                         v.Points.Add(new Point {
@@ -254,14 +274,20 @@ Example
                 // Diagnostic dump uses the brightest tracked star and the angle the
                 // reference variant actually used on this frame.
                 if (dumpDir != null && refState?.TrackedStars != null && refState.TrackedStars.Count > 0) {
-                    var star = refState.TrackedStars[0];
-                    double dumpAngle = !double.IsNaN(refState.LastAngleDeg)
+                    double dumpAngle = variants[0].Params.autoSpikeAngle && !double.IsNaN(refState.LastAngleDeg)
                         ? refState.LastAngleDeg
                         : variants[0].Params.spikeAngleDeg;
 
-                    var d = Diagnostics.Dump(dumpDir, img.Data, img.Width, img.Height, star,
-                                             variants[0].Params, dumpAngle, pos, hfrAvg, writeImages: true);
-                    if (d != null) dumps.Add(d);
+                    int dumpStars = Math.Clamp((int)opt.GetD("dump-stars", 1), 1, refState.TrackedStars.Count);
+                    for (int starIndex = 0; starIndex < dumpStars; starIndex++) {
+                        var star = refState.TrackedStars[starIndex];
+                        string frameName = Path.GetFileNameWithoutExtension(file);
+                        if (dumpStars > 1) frameName += $"_star{starIndex:D2}";
+                        var d = Diagnostics.Dump(dumpDir, img.Data, img.Width, img.Height, star,
+                                                 variants[0].Params, dumpAngle, pos, hfrAvg, writeImages: true,
+                                                 frameName: frameName);
+                        if (d != null) dumps.Add(d);
+                    }
                 }
 
                 processed++;
@@ -283,7 +309,7 @@ Example
             PrintCurves(variants, hfrByPos);
             PrintQuality(variants, hfrByPos);
 
-            return 0;
+            return variants.Any(v => v.Points.Count > 0) ? 0 : 3;
         }
 
         // ==========================================================
@@ -390,25 +416,35 @@ Example
             Console.WriteLine("=== acceptance ===");
             Console.WriteLine($"  near-focus band: HFR <= {hfrMin * 1.5:F2} ({nearPositions.Count} of {hfrCurve.Count} positions)");
             Console.WriteLine();
-            Console.WriteLine($"  {"metric",-12} {"rho(HFR)",9} {"nearGain",9} {"splitOn",9} {"failFrac",9}");
+            Console.WriteLine($"  {"metric",-12} {"rho(HFR)",9} {"nearGain",9} {"nearSNRx",9} {"splitOn",9} {"failFrac",9}");
 
             var hfrPoints = hfrCurve.Select(c => new Point { Pos = c.pos, J = c.hfr, Hfr = c.hfr }).ToList();
-            ReportAcceptance("HFR (ref)", hfrPoints, hfrCurve, nearPositions);
+            var hfrRepeats = hfrByPos.Select(p => (p.pos, value: p.hfr)).ToList();
+            ReportAcceptance("HFR (ref)", hfrPoints, hfrCurve, nearPositions, hfrRepeats, hfrRepeats, 0, 0);
 
             foreach (var v in variants)
-                ReportAcceptance(v.Name, Collapse(v.Points), hfrCurve, nearPositions);
+                ReportAcceptance(v.Name, Collapse(v.Points), hfrCurve, nearPositions,
+                    v.Points.Select(p => (p.Pos, p.J)).ToList(), hfrRepeats,
+                    v.Frames.Count == 0 ? double.NaN : v.Frames.Count(r => r.IsValid && r.MedianSeparation > 0) / (double)v.Frames.Count,
+                    v.Frames.Count == 0 ? double.NaN : v.Frames.Count(r => !r.IsValid) / (double)v.Frames.Count);
 
             Console.WriteLine();
             Console.WriteLine("  rho(HFR)  Spearman rank correlation against HFR over the whole sweep (want ~ +1)");
             Console.WriteLine("  nearGain  near-focus contrast of this metric divided by HFR's (want > 1)");
+            Console.WriteLine("            amplitude only; zero-median or fewer than 3 positions gives '-'");
+            Console.WriteLine("  nearSNRx  near-focus range/repeat-noise divided by HFR's, on paired repeated positions");
             Console.WriteLine("  splitOn   fraction of frames where a split was detected");
-            Console.WriteLine("  failFrac  fraction of frames with no usable profile (want failures, not guesses,");
-            Console.WriteLine("            on frames where the spike has washed out)");
+            Console.WriteLine("  failFrac  invalid evaluations / all evaluated frames (including dropped frames)");
+            Console.WriteLine("  A valid width or orientation alone does not prove the ROI contains diffraction spikes.");
             Console.WriteLine();
         }
 
-        private static void ReportAcceptance(string label, List<Point> curve, List<(int pos, double hfr)> hfrCurve, HashSet<int> near) {
-            if (curve.Count < 4) { Console.WriteLine($"  {label,-12} {"-",9} {"-",9} {"-",9} {"-",9}"); return; }
+        private static void ReportAcceptance(string label, List<Point> curve, List<(int pos, double hfr)> hfrCurve, HashSet<int> near,
+            List<(int pos, double value)> raw, List<(int pos, double value)> hfrRaw, double splitOn, double failFrac) {
+            if (curve.Count < 4) {
+                Console.WriteLine($"  {label,-12} {"-",9} {"-",9} {"-",9} {Fmt(splitOn * 100, "F0") + "%",9} {Fmt(failFrac * 100, "F0") + "%",9}");
+                return;
+            }
 
             var hfrByPos = hfrCurve.ToDictionary(c => c.pos, c => c.hfr);
             var paired = curve.Where(p => hfrByPos.ContainsKey(p.Pos)).ToList();
@@ -424,10 +460,29 @@ Example
                 if (hContrast > 0) nearGain = mContrast / hContrast;
             }
 
-            double splitOn = curve.Count(p => p.Sep > 0) / (double)curve.Count;
-            double failFrac = curve.Count(p => double.IsNaN(p.Snr)) / (double)curve.Count;
+            var repeated = raw.GroupBy(p => p.pos).Where(g => g.Count() >= 2).Select(g => g.Key).ToHashSet();
+            repeated.IntersectWith(hfrRaw.GroupBy(p => p.pos).Where(g => g.Count() >= 2).Select(g => g.Key));
+            repeated.IntersectWith(near);
+            double mSnr = NearSignalToNoise(raw, repeated);
+            double hSnr = NearSignalToNoise(hfrRaw, repeated);
+            double snrRatio = double.IsFinite(hSnr) && hSnr > 0 ? mSnr / hSnr : double.NaN;
 
-            Console.WriteLine($"  {label,-12} {Fmt(rho, "F3"),9} {Fmt(nearGain, "F2"),9} {splitOn,9:P0} {failFrac,9:P0}");
+            Console.WriteLine($"  {label,-12} {Fmt(rho, "F3"),9} {Fmt(nearGain, "F2"),9} {Fmt(snrRatio, "F2"),9} {splitOn,9:P0} {failFrac,9:P0}");
+        }
+
+        private static double NearSignalToNoise(List<(int pos, double value)> points, HashSet<int> positions) {
+            var groups = points.Where(p => positions.Contains(p.pos)).GroupBy(p => p.pos).ToList();
+            if (groups.Count < 3) return double.NaN;
+            double ss = 0; int dof = 0;
+            var medians = new List<double>();
+            foreach (var group in groups) {
+                double mean = group.Average(p => p.value);
+                ss += group.Sum(p => (p.value - mean) * (p.value - mean));
+                dof += group.Count() - 1;
+                medians.Add(SpikeCore.Median(group.Select(p => p.value).ToList()));
+            }
+            double noise = dof > 0 ? Math.Sqrt(ss / dof) : 0;
+            return noise > 0 ? (medians.Max() - medians.Min()) / noise : double.NaN;
         }
 
         /// <summary>(max - min) / median. Scale free, so metrics in different units compare.</summary>
@@ -435,7 +490,7 @@ Example
             var v = values.Where(x => !double.IsNaN(x)).ToList();
             if (v.Count < 2) return 0;
             double med = SpikeCore.Median(v);
-            if (Math.Abs(med) < 1e-12) return 0;
+            if (Math.Abs(med) < 1e-12) return double.NaN;
             return (v.Max() - v.Min()) / Math.Abs(med);
         }
 
@@ -543,7 +598,9 @@ Example
             double a = m[0, 3] / m[0, 0];
             double b = m[1, 3] / m[1, 1];
             if (Math.Abs(a) < 1e-15 || a <= 0) return double.NaN;
-            return x0 - b / (2 * a);
+            double vertex = x0 - b / (2 * a);
+            return double.IsFinite(vertex) && vertex >= sel.Min(p => p.pos) && vertex <= sel.Max(p => p.pos)
+                ? vertex : double.NaN;
         }
 
         // ==========================================================
@@ -616,7 +673,7 @@ Example
                 => Values.TryGetValue(key, out var v) ? v : fallback;
         }
 
-        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed", "auto-angle", "compare" };
+        private static readonly HashSet<string> KnownFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "reseed", "auto-angle", "compare", "saved-stars" };
 
         private static Options ParseOptions(string[] args) {
             var opt = new Options();

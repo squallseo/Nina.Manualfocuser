@@ -25,6 +25,14 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Legacy")]
+        public string SpikeMetric {
+            get { return ((string)(this["SpikeMetric"])); }
+            set { this["SpikeMetric"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool PrepareImage {
             get {
