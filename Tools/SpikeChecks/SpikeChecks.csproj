@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Models/SpikeCore.cs" Link="SpikeCore.cs" />
+    <Compile Include="../../Models/FocusCurveFit.cs" Link="FocusCurveFit.cs" />
     <Compile Include="../SpikeBatch/SavedDetection.cs" Link="SavedDetection.cs" />
   </ItemGroup>
 </Project>

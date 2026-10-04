@@ -584,85 +584,30 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 Logger.Debug($"[ManualFocuser] Could not write spike diagnostics: {e.Message}");
             }
         }
-        public bool TryFitParabolaWeighted(IEnumerable<ScatterErrorPoint> sourceEnumerable, out double a, out double b, out double c) {
-            a = 0.0;
-            b = 0.0;
-            c = 0.0;
-
-            var source = sourceEnumerable?.ToList() ?? new List<ScatterErrorPoint>();
-            int count = source.Count;
-            if (count < 3) {
-                return false;
+        private static IEnumerable<FocusFitSample> ToFitSamples(IEnumerable<ScatterErrorPoint> source) {
+            foreach (var p in source ?? Enumerable.Empty<ScatterErrorPoint>()) {
+                double error = 0;
+                var property = p.GetType().GetProperty("YError") ?? p.GetType().GetProperty("ErrorY") ?? p.GetType().GetProperty("Stdev");
+                if (property != null) error = Convert.ToDouble(property.GetValue(p));
+                yield return new FocusFitSample(p.X, p.Y, error);
             }
-
-            double S_w = 0.0;
-            double S_wx = 0.0;
-            double S_wx2 = 0.0;
-            double S_wx3 = 0.0;
-            double S_wx4 = 0.0;
-            double S_wy = 0.0;
-            double S_wxy = 0.0;
-            double S_wx2y = 0.0;
-
-            for (int i = 0; i < count; i++) {
-                var p = source[i];
-                double x = p.X;
-                double y = p.Y;
-
-                // Read Y error using reflection to support different ScatterErrorPoint implementations
-                double yErr = 0.0;
-                var pi = p.GetType().GetProperty("YError") ?? p.GetType().GetProperty("ErrorY") ?? p.GetType().GetProperty("Stdev");
-                if (pi != null) {
-                    try {
-                        object val = pi.GetValue(p);
-                        if (val != null) yErr = Convert.ToDouble(val);
-                    } catch {
-                        yErr = 0.0;
-                    }
-                }
-                double w = 1.0;
-                if (yErr > 0.0) {
-                    w = 1.0 / (yErr * yErr);
-                }
-
-                double x2 = x * x;
-                double x3 = x2 * x;
-                double x4 = x2 * x2;
-
-                S_w += w;
-                S_wx += w * x;
-                S_wx2 += w * x2;
-                S_wx3 += w * x3;
-                S_wx4 += w * x4;
-                S_wy += w * y;
-                S_wxy += w * x * y;
-                S_wx2y += w * x2 * y;
-            }
-
-            double[,] A = new double[3, 3] {
-                { S_wx4, S_wx3, S_wx2 },
-                { S_wx3, S_wx2, S_wx },
-                { S_wx2, S_wx,  S_w }
-            };
-            double[] B = new double[3] { S_wx2y, S_wxy, S_wy };
-
-            double[] coeffs = Solve3x3(A, B);
-            if (coeffs == null) {
-                return false;
-            }
-
-            a = coeffs[0];
-            b = coeffs[1];
-            c = coeffs[2];
-            return true;
         }
 
+        public bool TryFitParabolaWeighted(IEnumerable<ScatterErrorPoint> sourceEnumerable, out double a, out double b, out double c) {
+            a = b = c = 0;
+            if (!FocusCurveFit.TryFit(ToFitSamples(sourceEnumerable), out var fit)) return false;
+            a = fit.A / (fit.Scale * fit.Scale);
+            b = fit.B / fit.Scale - 2 * a * fit.Center;
+            c = fit.C - fit.B * fit.Center / fit.Scale + a * fit.Center * fit.Center;
+            return true;
+        }
         /// <summary>
         /// Generate sampled curve points for the active pass and populate the matching FitCurvePoints collection.
         /// Returns true if the curve was generated.
         /// </summary>
         public bool GenerateFitCurveForCurrentPass(out bool max, out double xvalue, out double yvalue, int samplePoints = 100) {
-            var source = CurrentPass == 0 ? (IEnumerable<ScatterErrorPoint>)ManualFocusPointsPrimary : ManualFocusPointsSecondary;
+            var source = (CurrentPass == 0 ? ManualFocusPointsPrimary : ManualFocusPointsSecondary)
+                .Where(p => double.IsFinite(p.X) && double.IsFinite(p.Y)).ToList();
             var target = CurrentPass == 0 ? FitCurvePointsPrimary : FitCurvePointsSecondary;
 
             target.Clear();
@@ -675,8 +620,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 return false;
             }
 
-            double a, b, c;
-            if (!TryFitParabolaWeighted(source, out a, out b, out c)) {
+            if (!FocusCurveFit.TryFit(ToFitSamples(source), out var fit)) {
                 return false;
             }
 
@@ -696,14 +640,14 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double step = (right - left) / (n - 1);
             for (int i = 0; i < n; i++) {
                 double x = left + step * i;
-                double y = a * x * x + b * x + c;
+                double y = fit.Evaluate(x);
                 target.Add(new DataPoint(x, y));
             }
 
-            xvalue = -b / (2 * a);
-            yvalue = a * xvalue * xvalue + b * xvalue + c;
+            xvalue = fit.Vertex;
+            yvalue = double.IsFinite(xvalue) ? fit.Evaluate(xvalue) : double.NaN;
 
-            if(a<0) {
+            if(fit.A<0) {
                 max = true;
             } else {
                 max = false;
@@ -712,58 +656,5 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return true;
         }
 
-        /// <summary>
-        /// Solve a 3x3 linear system A * x = B using Gaussian elimination with partial pivoting.
-        /// Returns null if singular.
-        /// </summary>
-        private double[] Solve3x3(double[,] A, double[] B) {
-            double[,] M = new double[3, 4];
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    M[i, j] = A[i, j];
-                }
-                M[i, 3] = B[i];
-            }
-
-            // Forward elimination with partial pivoting
-            for (int k = 0; k < 3; k++) {
-                int pivot = k;
-                double max = Math.Abs(M[k, k]);
-                for (int r = k + 1; r < 3; r++) {
-                    double absv = Math.Abs(M[r, k]);
-                    if (absv > max) {
-                        max = absv;
-                        pivot = r;
-                    }
-                }
-                if (Math.Abs(M[pivot, k]) < 1e-18) {
-                    return null;
-                }
-                if (pivot != k) {
-                    for (int c = k; c < 4; c++) {
-                        double tmp = M[k, c];
-                        M[k, c] = M[pivot, c];
-                        M[pivot, c] = tmp;
-                    }
-                }
-
-                for (int i = k + 1; i < 3; i++) {
-                    double factor = M[i, k] / M[k, k];
-                    for (int j = k; j < 4; j++) {
-                        M[i, j] -= factor * M[k, j];
-                    }
-                }
-            }
-
-            double[] x = new double[3];
-            for (int i = 2; i >= 0; i--) {
-                double sum = M[i, 3];
-                for (int j = i + 1; j < 3; j++) {
-                    sum -= M[i, j] * x[j];
-                }
-                x[i] = sum / M[i, i];
-            }
-            return x;
-        }
     }
 }

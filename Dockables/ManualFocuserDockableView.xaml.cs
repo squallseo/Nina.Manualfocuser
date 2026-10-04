@@ -20,6 +20,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class ManualFocuserDockableView : UserControl {
         public ManualFocuserDockableView() {
             InitializeComponent();
+            Loaded += OnLoaded;
+            DataContextChanged += OnDataContextChanged;
+        }
+        private async void OnLoaded(object sender, RoutedEventArgs e) {
+            if (DataContext is ManualFocuserDockableVM vm) await vm.EnsureFocusTargetsLoadedAsync();
+        }
+        private async void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
+            if (IsLoaded && e.NewValue is ManualFocuserDockableVM vm) await vm.EnsureFocusTargetsLoadedAsync();
         }
     }
 }

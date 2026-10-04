@@ -22,277 +22,183 @@
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/ProfileService.xaml" />
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/Styles/CheckBox.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="FocusCard" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="12"/>
+                <Setter Property="Margin" Value="0,0,0,10"/>
+            </Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="Padding" Value="6,3"/>
+            </Style>
+            <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/></Style>
+            <Style TargetType="Expander"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/></Style>
+            <Style x:Key="FocusButton" TargetType="Button">
+                <Setter Property="MinHeight" Value="32"/>
+                <Setter Property="Padding" Value="12,5"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SecondaryBrush}"/></Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SecondaryBrush}"/></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.75"/></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4"/></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <!-- Tracking state is shown in the header rather than used to disable the whole
-             panel: gating on it makes the plugin untestable indoors with a simulator. -->
-        <Grid Margin="5,0,5,0">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="10">
             <Grid.RowDefinitions>
-                <RowDefinition Height="auto" />
-                <RowDefinition/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="380"/>
             </Grid.RowDefinitions>
-            <StackPanel Margin="0,5,0,5" Orientation="Vertical">
-                <!--Is Tracking /  -->
-                <Grid VerticalAlignment="Center" Height="25"
-                        Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition/>
-                    </Grid.ColumnDefinitions>
-                    <!--Is Tracking /-->
-                    <StackPanel Orientation="Horizontal" Grid.Column="0">
-                        <TextBlock VerticalAlignment="Center" Text="Is Tracking" />
-                        <CheckBox Width="20"
-                            Height="20"
-                            Margin="5,0,0,0"
-                            HorizontalAlignment="Left"
-                            BorderBrush="Transparent"
-                            IsChecked="{Binding TelescopeInfo.TrackingEnabled, FallbackValue=False, Mode=OneWay}"
-                            IsEnabled="False"
-                            Style="{StaticResource CheckmarkCheckbox}"/>
+            <StackPanel>
+                <Border Style="{StaticResource FocusCard}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Focus star" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Bright stars visible from your NINA profile location" Margin="0,3,0,0" Foreground="{StaticResource SecondaryBrush}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshFocusTargetsCommand}" Style="{StaticResource FocusButton}" Margin="10,0,0,0"/>
+                        </Grid>
+                        <Grid Margin="0,12,0,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/><ColumnDefinition Width="65"/><ColumnDefinition Width="65"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="STAR" Foreground="{StaticResource SecondaryBrush}"/>
+                            <TextBlock Grid.Column="1" Text="MAG" Foreground="{StaticResource SecondaryBrush}"/>
+                            <TextBlock Grid.Column="2" Text="ALT" Foreground="{StaticResource SecondaryBrush}"/>
+                            <TextBlock Grid.Column="3" Text="AZ" Foreground="{StaticResource SecondaryBrush}"/>
+                        </Grid>
+                        <ListBox ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" Height="115" BorderThickness="0"
+                                 Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource PrimaryBrush}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="Padding" Value="6,6"/>
+                                    <Setter Property="Template"><Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Row" Padding="{TemplateBinding Padding}" CornerRadius="4" Background="Transparent" BorderThickness="1" BorderBrush="Transparent">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{StaticResource BorderBrush}"/></Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource SecondaryBrush}"/></Trigger>
+                                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource SecondaryBrush}"/></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value></Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="60"/><ColumnDefinition Width="65"/><ColumnDefinition Width="65"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Magnitude, StringFormat=F1}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Altitude, StringFormat={}{0:F1}°}"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Azimuth, StringFormat={}{0:F1}°}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <WrapPanel Margin="0,10,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Minimum altitude" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Width="45" MinHeight="32" VerticalContentAlignment="Center" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}"/>
+                            <TextBlock Text="°" VerticalAlignment="Center" Margin="4,0,16,0"/>
+                            <Button Content="GOTO selected star" Command="{Binding GotoFocusTargetCommand}" Style="{StaticResource FocusButton}" FontWeight="SemiBold"
+                                    ToolTip="Connect and unpark the mount; disconnect the guider. Capture and focus operations must be idle."/>
+                            <Button Content="Stop" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="6,0,0,0"
+                                    Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding FocusTargetStatus}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
                     </StackPanel>
-                    <!--Is Guiding /-->
-                    <StackPanel Orientation="Horizontal" Grid.Column="1">
-                        <TextBlock VerticalAlignment="Center" Text="Is Guiding" Margin="10,0,0,0"/>
-                        <CheckBox Width="20"
-                            Height="20"
-                            Margin="5,0,0,0"
-                            HorizontalAlignment="Left"
-                            BorderBrush="Transparent"
-                            IsChecked="{Binding TelescopeInfo.isPulseGuiding, FallbackValue=False, Mode=OneWay}"
-                            IsEnabled="False"
-                            Style="{StaticResource InvertedCheckmarkCheckbox}"/>
+                </Border>
+                <Border Style="{StaticResource FocusCard}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Manual focus" FontSize="16" FontWeight="SemiBold"/>
+                            <CheckBox Grid.Column="1" Content="Expose after move" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </Grid>
+                        <WrapPanel Margin="0,12,0,0">
+                            <StackPanel Margin="0,0,16,8">
+                                <TextBlock Text="Target position" Foreground="{StaticResource SecondaryBrush}" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox Width="90" MinHeight="32" VerticalContentAlignment="Center" Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Style="{StaticResource FocusButton}" Content="Move" MinWidth="65" MinHeight="32" Margin="6,0,0,0" Command="{Binding MoveToPositionCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,0,8">
+                                <TextBlock Text="Step size" Foreground="{StaticResource SecondaryBrush}" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox Width="65" MinHeight="32" VerticalContentAlignment="Center" Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Style="{StaticResource FocusButton}" Content="In −" MinWidth="65" MinHeight="32" Margin="6,0,0,0" Command="{Binding MoveINCommand}"/>
+                                    <Button Style="{StaticResource FocusButton}" Content="Out +" MinWidth="65" MinHeight="32" Margin="6,0,0,0" Command="{Binding MoveOUTCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button Content="Use best position" Command="{Binding InputResetCommand}" Style="{StaticResource FocusButton}" ToolTip="Set target to the best measured position and restore the configured step size."/>
+                            <Button Content="Clear chart" Command="{Binding ClearChartCommand}" Style="{StaticResource FocusButton}" Margin="6,0,0,0"/>
+                            <Button Content="Stop focus" Command="{Binding HaltFocuserCommand}" Style="{StaticResource FocusButton}" Margin="6,0,0,0"
+                                    Visibility="{Binding IsMoving, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                        </WrapPanel>
                     </StackPanel>
-                    <!--exposure toggle /-->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="2" IsEnabled="{Binding CameraInfo.Connected}">
-                        <TextBlock Margin="10,0,5,0" VerticalAlignment="Center" Text="Expose after focus"/>
-                        <CheckBox IsChecked="{Binding TakeShootAfterMove}" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="3">
-                        <!-- MIN HFR -->
-                        <TextBlock Text="MIN (Position, HFR) = ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding MinStep}"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding MinHFR, StringFormat=F3}"/>
-                        <TextBlock Text=")" />
-                        <TextBlock Text=", Delta= ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding StepDelta}" FontWeight="Bold"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding HFRDelta, StringFormat=F3}" FontWeight="Bold"/>
-                        <TextBlock Text=")" />
-                        <!-- Spike minimum, tracked independently of HFR -->
-                        <StackPanel Orientation="Horizontal"
-                                    Visibility="{Binding HasSpikePoints, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                            <TextBlock Margin="10,0,0,0" Text="MIN (Position, J) = (" Foreground="{StaticResource NotificationWarningBrush}"/>
-                            <TextBlock Text="{Binding MinSpikeStep}" Foreground="{StaticResource NotificationWarningBrush}"/>
-                            <TextBlock Text="," Foreground="{StaticResource NotificationWarningBrush}"/>
-                            <TextBlock Margin="5,0,0,0" Text="{Binding MinSpike, StringFormat=F3}" Foreground="{StaticResource NotificationWarningBrush}"/>
-                            <TextBlock Text=")" Foreground="{StaticResource NotificationWarningBrush}"/>
+                </Border>
+                <Border Style="{StaticResource FocusCard}">
+                    <Expander Header="Autofocus" IsExpanded="False">
+                        <StackPanel Margin="0,10,0,0">
+                            <WrapPanel>
+                                <TextBlock Text="Method" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox MinWidth="170" MinHeight="32" SelectedIndex="0" Margin="0,0,8,0"><ComboBoxItem Content="Linear scan"/></ComboBox>
+                                <Button Style="{StaticResource FocusButton}" Content="Run autofocus" MinWidth="110" MinHeight="32" Command="{Binding LinearAFCommand}"/>
+                            </WrapPanel>
+                            <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="0,10,0,0" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
+                            <TextBlock Text="Scan at fixed intervals. Each pass shows a quadratic fit; the current routine uses measured values to choose its stopping position."
+                                       TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{StaticResource SecondaryBrush}"/>
                         </StackPanel>
-                    </StackPanel>
-                    <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25">
-                        <ninactrl:CancellableButton
-                            Command="{Binding LinearAFCommand}"
-                            MinWidth="70"
-                            ButtonText="LinearAF"
-                            ToolTip="Runs Linear AF"
-                            CancelButtonImage="{StaticResource CancelSVG}"
-                            CancelCommand="{Binding HaltFocuserCommand}"
-                            CancelToolTip="{ns:Loc LblCancel}"
-                            HorizontalContentAlignment="Left">
-                        </ninactrl:CancellableButton>
-                    </Grid>
-                </Grid>
-                <!-- GO/IN/OUT -->
-                <Grid Height="25" Margin="0,5,5,0"
-                            Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="200"/>
-                        <ColumnDefinition Width="250"/>
-                        <ColumnDefinition Width="auto"/>
-                        <ColumnDefinition/>
-                    </Grid.ColumnDefinitions>
-                    <!-- Target + GO -->
-                    <Grid Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="0" Height="25">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
-                        <TextBox Grid.Column="1"
-                            VerticalContentAlignment="Center"
-                            Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"
-                            IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
-
-                        <!-- ✅ 실행 중 Cancel로 바뀌려면 Command는 NINA AsyncCommand여야 함 -->
-                        <ninactrl:CancellableButton Grid.Column="2"
-                            MinWidth="50"
-                            Margin="5,0,0,0"
-                            ButtonText="{ns:Loc LblMove}"
-                            ToolTip="{ns:Loc LblMoveFocuserTooltip}"
-                            HorizontalContentAlignment="Center"
-                            CancelButtonImage="{StaticResource CancelSVG}"
-                            CancelCommand="{Binding HaltFocuserCommand}"
-                            CancelToolTip="{ns:Loc LblCancel}"
-                            Command="{Binding MoveToPositionCommand}">
-                        </ninactrl:CancellableButton>
-                    </Grid>
-
-                    <!-- Step + In/Out -->
-                    <Grid VerticalAlignment="Center" Margin="15,0,0,0" Grid.Column="1" Height="25">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition />
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Text="Step Inc." VerticalAlignment="Center" Margin="0,0,5,0" Grid.Column="0"/>
-                        <TextBox Grid.Column="1"
-                                VerticalContentAlignment="Center"
-                                Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"
-                                IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/>
-
-                        <ninactrl:CancellableButton Grid.Column="2"
-                            MinWidth="50"
-                            Margin="5,0,0,0"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center"
-                            ToolTip="Move in"
-                            ButtonText="In(-)"
-                            CancelButtonImage="{StaticResource CancelSVG}"
-                            CancelCommand="{Binding HaltFocuserCommand}"
-                            CancelToolTip="{ns:Loc LblCancel}"
-                            Command="{Binding MoveINCommand}"/>
-
-                        <ninactrl:CancellableButton Grid.Column="3"
-                            MinWidth="50"
-                            Margin="5,0,0,0"
-                            HorizontalContentAlignment ="Center"
-                            VerticalContentAlignment="Center"
-                            ToolTip="Move out"
-                            ButtonText="Out(+)"
-                            CancelButtonImage="{StaticResource CancelSVG}"
-                            CancelCommand="{Binding HaltFocuserCommand}"
-                            CancelToolTip="{ns:Loc LblCancel}"
-                            Command="{Binding MoveOUTCommand}"/>
-                    </Grid>
-                    <Grid HorizontalAlignment="Left" Margin="15,0,0,0" Grid.Column="2" Height="25" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
-                        <ninactrl:CancellableButton
-                            Command="{Binding InputResetCommand}"
-                            ButtonText="Input Reset"
-                            MinWidth="90"
-                            ToolTip="Target = MIN Position, Step Inc. = Focuser Setting Step"
-                            HorizontalContentAlignment="Center">
-                        </ninactrl:CancellableButton>
-                    </Grid>
-                    <Grid HorizontalAlignment="Right" Margin="5,0,0,0" Grid.Column="3" Height="25">
-                        <ninactrl:CancellableButton
-                            Command="{Binding ClearChartCommand}"
-                            MinWidth="70"
-                            ButtonText="Clear All"
-                            ToolTip="Clear all points"
-                            HorizontalContentAlignment="Left">
-                        </ninactrl:CancellableButton>
-                    </Grid>
-                </Grid>
-
-                <Expander Header="Focus star · recommend / GOTO" Margin="0,5,0,0">
-                    <StackPanel Margin="5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Minimum altitude (°)" VerticalAlignment="Center"/>
-                            <TextBox Width="45" Margin="5,0" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}"/>
-                            <Button Content="Refresh stars" Command="{Binding RefreshFocusTargetsCommand}" Padding="6,2"/>
-                        </StackPanel>
-                        <ComboBox Margin="0,5,0,0" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" DisplayMemberPath="Display"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                            <Button Content="GOTO selected star" Command="{Binding GotoFocusTargetCommand}" Padding="6,2"
-                                    ToolTip="Connect the mount and disconnect the guider. Available when capture, slew and focus operations are idle."/>
-                            <Button Content="Cancel GOTO" Command="{Binding CancelGotoCommand}" Margin="5,0,0,0" Padding="6,2"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding FocusTargetStatus}" TextWrapping="Wrap" Margin="0,5,0,0"/>
-                    </StackPanel>
-                </Expander>
-                <TextBlock Text="{Binding SpikeDisplayStatus}" Margin="0,5,0,0"/>
-                <!-- Spike angle. A wrong angle damages the metric more than any other
-                     parameter, and it changes whenever the camera is rotated, so it is
-                     driven from here rather than from the plugin options tab. -->
-                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,5,0" VerticalAlignment="Center"
-                            Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-
-                    <TextBlock Text="Spike Angle" VerticalAlignment="Center" Margin="0,0,5,0"
-                               Foreground="{StaticResource NotificationWarningBrush}"/>
-                    <TextBox Width="55"
-                             VerticalContentAlignment="Center"
-                             HorizontalContentAlignment="Right"
-                             ToolTip="Orientation of the spider vane pair to analyse, in degrees.&#x0A;Analysis runs perpendicular to this direction."
-                             IsEnabled="{Binding AutoSpikeAngle, Converter={StaticResource InverseBooleanConverter}}"
-                             Text="{Binding SpikeAngle, StringFormat=F1, UpdateSourceTrigger=LostFocus}"/>
-                    <TextBlock Text="°" VerticalAlignment="Center" Margin="2,0,0,0"/>
-
-                    <TextBlock Text="Auto" VerticalAlignment="Center" Margin="12,0,5,0"
-                               ToolTip="Use the orientation measured from each frame instead of the value on the left."/>
-                    <CheckBox VerticalAlignment="Center" IsChecked="{Binding AutoSpikeAngle}"/>
-
-                    <TextBlock Text="measured" VerticalAlignment="Center" Margin="15,0,5,0"
-                               Foreground="{StaticResource SecondaryBrush}"/>
-                    <TextBlock VerticalAlignment="Center"
-                               Text="{Binding MeasuredAngleText}"
-                               Foreground="{StaticResource NotificationWarningBrush}"
-                               ToolTip="Orientation measured from the last frame, whether or not Auto is on.&#x0A;The multiplier is peak over mean of the directional profile;&#x0A;below about 1.2 there is no clear spike."/>
-
-                    <Button Margin="10,0,0,0"
-                            MinWidth="45"
-                            Padding="6,0,6,0"
-                            Content="Use"
-                            ToolTip="Copy the measured angle into the box on the left and switch Auto off."
-                            Command="{Binding UseMeasuredAngleCommand}"/>
-                </StackPanel>
-<StackPanel Orientation="Horizontal" Margin="10,5,0,0"><TextBlock Text="One Pass" Margin="0,0,5,0"/><CheckBox IsChecked="{Binding UseOnePass}" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"/></StackPanel>
-                <!-- Linear AF -->
-                <Grid Height="25" Margin="0,5,5,0"
-                            Visibility="{Binding FocuserInfo.Connected, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="200"/>
-                        <ColumnDefinition Width="250"/>
-                        <ColumnDefinition Width="auto"/>
-                        <ColumnDefinition/>
-                    </Grid.ColumnDefinitions>
-                    <!-- Target + GO -->
-                    <Grid Margin="0,0,0,0" VerticalAlignment="Center" Grid.Column="0" Height="25">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="350"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="0">
-                        <!-- MIN HFR -->
-                        <TextBlock Text="MAX (Position, HFR) = ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding MaxStep}"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding MaxHFR, StringFormat=F3}"/>
-                        <TextBlock Text=")" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center" Grid.Column="1" Grid.ColumnSpan="2">
-                        <!-- MIN HFR -->
-                        <TextBlock Text="MIN (Position, HFR) = ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding MinStep}"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding MinHFR, StringFormat=F3}"/>
-                        <TextBlock Text=")" />
-                        <TextBlock Text=", Delta= ("/>
-                        <TextBlock Margin="0,0,0,0" Text="{Binding StepDelta}" FontWeight="Bold"/>
-                        <TextBlock Text="," />
-                        <TextBlock Margin="5,0,0,0" Text="{Binding HFRDelta, StringFormat=F3}" FontWeight="Bold"/>
-                        <TextBlock Text=")" />
-                    </StackPanel>
-                </Grid>
+                    </Expander>
+                </Border>
+                <Border Style="{StaticResource FocusCard}" Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+                    <Expander Header="Spike analysis" IsExpanded="False">
+                        <WrapPanel Margin="0,10,0,0">
+                            <TextBlock Text="Angle" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox Width="55" MinHeight="32" VerticalContentAlignment="Center" Text="{Binding SpikeAngle, UpdateSourceTrigger=LostFocus}"/>
+                            <CheckBox Content="Auto" IsChecked="{Binding AutoSpikeAngle}" VerticalAlignment="Center" Margin="10,0"/>
+                            <TextBlock Text="{Binding MeasuredAngleText}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Button Content="Use angle" Command="{Binding UseMeasuredAngleCommand}" Style="{StaticResource FocusButton}"/>
+                        </WrapPanel>
+                    </Expander>
+                </Border>
+                <WrapPanel Margin="2,0,0,8">
+                    <TextBlock Text="Best HFR  " Foreground="{StaticResource SecondaryBrush}"/>
+                    <TextBlock Text="{Binding MinHFR, StringFormat=F3}" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                    <TextBlock Text="Position  " Foreground="{StaticResource SecondaryBrush}"/>
+                    <TextBlock Text="{Binding MinStep}" Margin="0,0,12,0"/>
+                    <TextBlock Text="Δ HFR  " Foreground="{StaticResource SecondaryBrush}"/>
+                    <TextBlock Text="{Binding HFRDelta, StringFormat=F3}" Margin="0,0,12,0"/>
+                    <TextBlock Text="{Binding SpikeDisplayStatus}" Foreground="{StaticResource SecondaryBrush}"/>
+                </WrapPanel>
             </StackPanel>
             <oxy:Plot
                 Grid.Row="1" Margin="0,0,0,0"
@@ -382,44 +288,44 @@
                         MarkerSize="5"
                         MarkerType="Diamond"/>
                     <!-- Primary pass (coarse) -->
-                    <oxy:ScatterSeries Title="Points (Pass 0)"
+                    <oxy:ScatterSeries Title="Measured · coarse"
                                        ItemsSource="{Binding PlotFocusPointsPrimary}"
                                        DataFieldX="X"
                                        DataFieldY="Y"
                                        MarkerType="Circle"
-                                       MarkerFill="Blue"
-                                       MarkerStroke="DarkBlue"
+                                       MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
+                                       MarkerStroke="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                                        MarkerSize="5"
                                        MarkerStrokeThickness="1"
                                        TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
 
-                    <oxy:LineSeries Title="Fit (Pass 0)"
+                    <oxy:LineSeries Title="Quadratic · coarse"
                                     ItemsSource="{Binding FitCurvePointsPrimary}"
                                     DataFieldX="X"
                                     DataFieldY="Y"
-                                    Color="Blue"
+                                    Color="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                                     StrokeThickness="1.5"
                                     LineStyle="Solid"
                                     CanTrackerInterpolatePoints="True"
                                     TrackerFormatString="Fit (P0)\nPos: {2:0}\nHFR: {4:0.000}" />
 
                     <!-- Secondary pass (fine) -->
-                    <oxy:ScatterSeries Title="Points (Pass 1)"
+                    <oxy:ScatterSeries Title="Measured · fine"
                                        ItemsSource="{Binding PlotFocusPointsSecondary}"
                                        DataFieldX="X"
                                        DataFieldY="Y"
                                        MarkerType="Square"
-                                       MarkerFill="Firebrick"
-                                       MarkerStroke="DarkRed"
+                                       MarkerFill="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
+                                       MarkerStroke="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
                                        MarkerSize="5"
                                        MarkerStrokeThickness="1"
                                        TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
 
-                    <oxy:LineSeries Title="Fit (Pass 1)"
+                    <oxy:LineSeries Title="Quadratic · fine"
                                     ItemsSource="{Binding FitCurvePointsSecondary}"
                                     DataFieldX="X"
                                     DataFieldY="Y"
-                                    Color="Firebrick"
+                                    Color="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
                                     StrokeThickness="1.5"
                                     LineStyle="Dash"
                                     CanTrackerInterpolatePoints="True"
@@ -434,17 +340,6 @@
                         TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
                         X="{Binding MinStep}"
                         Y="{Binding MinHFR}" />
-                    <oxy:ArrowAnnotation
-                        HeadWidth="7"
-                        HeadLength="19"
-                        Veeness="3"
-                        StrokeThickness="1"
-                        LineStyle="DashDotDot"
-                        Color="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                        Text="{Binding HFRDelta, StringFormat=F3}"
-                        TextColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                        StartPoint="{Binding ArrowPoint[0]}"
-                        EndPoint="{Binding ArrowPoint[1]}"/>
                 </oxy:Plot.Annotations>
             </oxy:Plot>
         </Grid>

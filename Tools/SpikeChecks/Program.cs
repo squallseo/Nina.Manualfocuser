@@ -11,6 +11,10 @@ double[] Profile(Func<double, double> f, int radius = 40) =>
     Enumerable.Range(-radius, 2 * radius + 1).Select(u => f(u)).ToArray();
 double G(double x, double sigma) => Math.Exp(-x * x / (2 * sigma * sigma));
 var parameters = new SpikeAnalysisParams();
+var focusSamples = Enumerable.Range(-5, 11).Select(i => new FocusFitSample(1000000 + i * 5, 2 + 0.01 * i * i, 0.1)).ToList();
+Check(FocusCurveFit.TryFit(focusSamples, out var focusFit) && Math.Abs(focusFit.Vertex - 1000000) < 1e-5 && Math.Abs(focusFit.Evaluate(1000000) - 2) < 1e-9, "Large absolute focuser positions retain a stable quadratic vertex");
+Check(FocusCurveFit.TryFit(Enumerable.Range(0, 6).Select(i => new FocusFitSample(100000 + i, 2 + i, 1)), out var lineFit) && double.IsNaN(lineFit.Vertex), "A linear-looking quadratic does not invent an infinite focus vertex");
+Check(!FocusCurveFit.TryFit(new[] { new FocusFitSample(100000, 2, 1), new FocusFitSample(100000, 3, 1), new FocusFitSample(100001, 4, 1) }, out _), "Fitting requires three distinct positions");
 
 float[] MakeRoi(Func<double, double, double> intensity, int n = 120) {
     return Enumerable.Range(0, n * n).Select(i => (float)intensity(i % n - n / 2.0, i / n - n / 2.0)).ToArray();

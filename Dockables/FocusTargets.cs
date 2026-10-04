@@ -14,6 +14,12 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private CancellationTokenSource gotoCts;
         private bool isGoingToFocusTarget;
         private bool refreshingFocusTargets;
+        private bool initialFocusTargetsRequested;
+        public async Task EnsureFocusTargetsLoadedAsync() {
+            if (initialFocusTargetsRequested || disposed) return;
+            initialFocusTargetsRequested = true;
+            await RunGuarded("Find focus stars", RefreshFocusTargetsAsync);
+        }
         private FocusStarSuggestion selectedFocusTarget;
         private double minimumFocusAltitude = 45;
         public AsyncObservableCollection<FocusStarSuggestion> FocusTargets { get; } = new();
@@ -62,7 +68,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
 
         private async Task<int> RefreshFocusTargetsAsync() {
+            if (refreshingFocusTargets || disposed) return 0;
             refreshingFocusTargets = true;
+            FocusTargetStatus = "Finding visible focus stars…";
+            RaisePropertyChanged(nameof(FocusTargetStatus));
             try {
                 var stars = await new DatabaseInteraction().GetBrightStars();
                 if (disposed) return 0;
@@ -76,6 +85,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 FocusTargetStatus = $"{suggestions.Count} stars · site {site.Latitude:F4}, {site.Longitude:F4} · {DateTimeOffset.Now:HH:mm:ss zzz}. Check exposure saturation after GOTO.";
                 RaisePropertyChanged(nameof(FocusTargetStatus));
                 return suggestions.Count;
+            } catch {
+                FocusTargetStatus = "Could not load stars. Check the NINA profile location and retry Refresh.";
+                RaisePropertyChanged(nameof(FocusTargetStatus));
+                throw;
             } finally { refreshingFocusTargets = false; CommandManager.InvalidateRequerySuggested(); }
         }
 

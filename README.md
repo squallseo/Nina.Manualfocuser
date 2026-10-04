@@ -500,7 +500,8 @@ The February 18 visible-spike control, with configured angle 90°, retained 2 of
 4 frames. Five new synthetic morphology checks cover a circular star, defocus
 ring, bilateral line, one-sided artifact and wrong axis; 28 core checks pass.
 
-Open **Focus star · recommend / GOTO** and click **Refresh stars**. The plugin
+The **Focus star** card automatically loads candidates once when the panel is
+first displayed. **Refresh** updates the list later. The plugin
 uses NINA's installed bright-star catalogue (magnitude ≤ 4), profile latitude,
 longitude and elevation, and current UTC through NINA's coordinate transform.
 It lists up to 20 candidates ordered by altitude, then magnitude, above the
@@ -529,6 +530,28 @@ Bahtinov analysis remains a follow-up stage. NINA already provides a manual
 [Bahtinov Analyzer](https://nighttime-imaging.eu/docs/master/site/tabs/imaging/).
 Its three-line alignment error must be handled separately from ordinary spider
 spike width, and validated on masked focus sweeps before controlling a focuser.
+
+The panel groups star selection and manual movement into separate cards, with
+wrapping controls for narrow docks and buttons that use the host theme colors.
+The collapsed **Autofocus** section contains a method selector (currently only
+**Linear scan**), **Run autofocus**, and **Single pass**. **Stop focus** is visible
+in the manual controls during movement, including an autofocus run.
+
+Linear refers to scanning at fixed position intervals, not a straight-line fit.
+Both coarse and fine passes use a weighted quadratic fit. A short, one-sided
+fine pass can look nearly straight. The former straight arrow connected the
+last two measurements and was not a fit; it has been removed, with Δ HFR shown
+in the summary instead. Legends now identify `Measured · coarse/fine` and
+`Quadratic · coarse/fine`. Fits are visual aids: the existing autofocus stopping
+rules still use measured extrema/thresholds, not the fitted vertex.
+
+Quadratic fitting now centers and scales focuser positions before solving, then
+evaluates curves in those normalized coordinates. This avoids large powers of
+absolute focuser positions destabilizing the fit. Essentially linear data have
+no reported vertex rather than an infinite value, and fewer than three distinct
+positions cannot generate a fit. Three new regressions bring the core/fit checks
+to 31. Standalone layout previews were inspected at widths 420 and 650 pixels;
+they use example stars and a placeholder chart, not a running NINA screen.
 
 End of Document
 
