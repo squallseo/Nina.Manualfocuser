@@ -110,3 +110,11 @@ invalid images and avoiding blind native-driver retries. Existing 31 spike/fit
 checks remain passing. A 256-pixel mask analysis takes about 95 ms on this
 development machine; this is CPU timing, not measured camera frame cadence.
 Real masked data, physical backlash and QHY600M speed remain unvalidated.
+
+Live capture is now a separate **Live focus** mode alongside Manual focus and Auto
+focus. It defaults to ordinary single-star HFR and shows a rolling time graph,
+star zoom and normalized horizontal brightness profile. Bahtinov overlay is
+optional. Exposure is adjustable in milliseconds (1–5000, subject to camera
+limits), while actual frame cadence remains displayed separately. The history
+retains at most 120 seconds / 600 points and is cleared after exposure/ROI changes.
+Changing focus modes cancels the live loop.

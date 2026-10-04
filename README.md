@@ -571,8 +571,13 @@ they use example stars and a placeholder chart, not a running NINA screen.
 
 ## Fast focus preview and experimental Bahtinov autofocus
 
-Open **Fast focus / Bahtinov** to start repeated preview exposures. Default exposure is
-250 ms; 100–500 ms is useful for bright stars, with up to 5 seconds available when
+Select **Live focus** in the focus mode list, then click **Start live** for repeated
+preview exposures. Default exposure is 250 ms; 100–500 ms is useful for bright stars,
+with 1–5000 ms configurable within the camera's supported exposure range. This mode
+shows a magnified star, a normalized horizontal brightness profile and a rolling
+120-second single-star HFR graph (maximum 600 points). **Clear live graph** resets
+the history; changing exposure or ROI clears it too. Switching modes stops live capture.
+Up to 5 seconds is available when
 the mask needs more signal. Set **ROI center %** to the star's X/Y position in the
 full camera image (50/50 means the center). The preview uses a 256-pixel ROI,
 1×1 binning and the current filter/gain. It requests a hardware subframe when
@@ -582,12 +587,12 @@ saved. In/Out moves use the manual Step and run between exposures. Stop cancels
 the loop and releases the camera reservation.
 
 Without a mask, the preview reports a local single-star half-flux radius; this is
-not the chart's NINA multi-star HFR. Enable **Analyze mask** to overlay three
+not the chart's NINA multi-star HFR. Enable **Bahtinov overlay** to overlay three
 detected lines and display signed pixel error. Invalid patterns show the HFR
 fallback or an unavailable measurement.
 
 For experimental autofocus, center an isolated star with a physical Bahtinov
-mask installed, confirm the mask checkbox, then select **Auto focus → Bahtinov
+mask installed, confirm the mask checkbox under **Auto focus → Bahtinov options**, then select **Auto focus → Bahtinov
 scan (experimental) → Run Bahtinov AF**. The scan uses NINA's autofocus step size
 and initial offset count (bounded to 1–12 offsets each side). It validates the
 initial image before moving, discards one frame after movement and takes the

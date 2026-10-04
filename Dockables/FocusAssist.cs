@@ -19,10 +19,24 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private double previewExposureMs = 250, previewX = 50, previewY = 50;
         private bool analyzeMask, maskConfirmed;
         private int pendingPreviewMove;
+        private string focusMode = "Manual";
+        public string FocusMode {
+            get => focusMode;
+            set {
+                if (focusMode == value || IsMoving) return;
+                focusMode = value;
+                assistCts?.Cancel();
+                RaisePropertyChanged();
+            }
+        }
+        public AsyncObservableCollection<OxyPlot.DataPoint> LiveHfrPoints { get; } = new();
+        public OxyPlot.DataPoint[] LiveStarProfile { get; private set; } = Array.Empty<OxyPlot.DataPoint>();
+        public double LiveHfr { get; private set; } = double.NaN;
+        public ICommand ClearLiveGraphCommand { get; private set; }
         public bool IsFocusAssistRunning => assistRunning;
-        public double PreviewExposureMs { get => previewExposureMs; set { if (double.IsFinite(value)) previewExposureMs = Math.Clamp(value, 100, 5000); RaisePropertyChanged(); } }
-        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); RaisePropertyChanged(); } }
-        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); RaisePropertyChanged(); } }
+        public double PreviewExposureMs { get => previewExposureMs; set { if (double.IsFinite(value)) previewExposureMs = Math.Clamp(value, 1, 5000); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
+        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
+        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
         public bool AnalyzeBahtinov { get => analyzeMask; set { analyzeMask = value; RaisePropertyChanged(); } }
         public bool BahtinovMaskConfirmed { get => maskConfirmed; set { maskConfirmed = value; RaisePropertyChanged(); CommandManager.InvalidateRequerySuggested(); } }
         public ImageSource FocusPreviewImage { get; private set; }
@@ -35,6 +49,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private void InitializeFocusAssist() {
             StartFocusPreviewCommand = new AsyncCommand<int>(() => RunGuarded("Focus preview", RunFocusPreviewAsync), _ => CanStartAssist());
             StopFocusPreviewCommand = new RelayCommand(_ => assistCts?.Cancel(), _ => assistRunning);
+            ClearLiveGraphCommand = new RelayCommand(_ => LiveHfrPoints.Clear());
             BahtinovAFCommand = new AsyncCommand<int>(() => RunGuarded("Bahtinov AF", RunBahtinovAfAsync), _ => CanStartAssist() && FocuserInfo?.Connected == true && BahtinovMaskConfirmed);
             PreviewMoveInCommand = new RelayCommand(_ => pendingPreviewMove = -(int)Math.Clamp(Math.Abs((long)UserStep), 1, 10000),
                 _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
@@ -59,6 +74,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             if (!CanStartAssist()) return 0;
             try {
                 BeginAssist(false);
+                LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
                 while (true) {
                     assistCts.Token.ThrowIfCancellationRequested();
@@ -71,11 +87,22 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     var frame = await DataModel.CaptureFocusPreviewAsync(PreviewExposureMs / 1000, 256, PreviewCenterX, PreviewCenterY, assistCts.Token);
                     bool mask = AnalyzeBahtinov;
                     var measurement = await Task.Run(() => mask ? BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height) : null, assistCts.Token);
-                    double hfr = mask ? double.NaN : await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height), assistCts.Token);
+                    double hfr = await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height), assistCts.Token);
                     assistCts.Token.ThrowIfCancellationRequested();
                     FocusPreviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, measurement);
                     RaisePropertyChanged(nameof(FocusPreviewImage));
                     long now = clock.ElapsedMilliseconds;
+                    LiveHfr = hfr;
+                    LiveHfrPoints.Add(new OxyPlot.DataPoint(now / 1000.0, hfr));
+                    while (LiveHfrPoints.Count > 600 || (LiveHfrPoints.Count > 1 && LiveHfrPoints[0].X < now / 1000.0 - 120)) LiveHfrPoints.RemoveAt(0);
+                    int peak = Array.IndexOf(frame.Pixels, frame.Pixels.Max());
+                    int px = peak % frame.Width, py = peak / frame.Width;
+                    double background = frame.Pixels.OrderBy(p => p).ElementAt(frame.Pixels.Length / 2);
+                    double amplitude = Math.Max(1, frame.Pixels[peak] - background);
+                    LiveStarProfile = Enumerable.Range(Math.Max(0, px - 64), Math.Min(frame.Width - 1, px + 64) - Math.Max(0, px - 64) + 1)
+                        .Select(x => new OxyPlot.DataPoint(x - px, Math.Max(0, frame.Pixels[py * frame.Width + x] - background) / amplitude)).ToArray();
+                    RaisePropertyChanged(nameof(LiveHfr));
+                    RaisePropertyChanged(nameof(LiveStarProfile));
                     string metric = mask ? measurement.IsValid ? $"Mask error {measurement.SignedErrorPixels:+0.00;-0.00;0.00} px" : $"HFR fallback: {measurement.FailureReason}" : double.IsFinite(hfr) ? $"Local HFR {hfr:F2} px" : "No isolated star detected";
                     if (mask && !measurement.IsValid) {
                         hfr = QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height);

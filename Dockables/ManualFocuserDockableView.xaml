@@ -83,23 +83,24 @@
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <ComboBox x:Name="FocusModeSelector" SelectedValuePath="Tag" SelectedValue="Manual" MinHeight="28" MinWidth="105"
+                            <ComboBox x:Name="FocusModeSelector" SelectedValuePath="Tag" SelectedValue="{Binding FocusMode}" MinHeight="28" MinWidth="105"
                                       IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
                                 <ComboBoxItem Content="Manual focus" Tag="Manual"/>
                                 <ComboBoxItem Content="Auto focus" Tag="Auto"/>
+<ComboBoxItem Content="Live focus" Tag="Live"/>
                             </ComboBox>
                             <Button Grid.Column="1" Content="Use best" Command="{Binding InputResetCommand}" Margin="5,0,0,0"
                                     IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"
                                     ToolTip="Set target to the best measured position and restore the configured step size.">
                                 <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
-                                    <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+                                    <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
                                 </Style></Button.Style>
                             </Button>
-                            <CheckBox Grid.Column="2" Content="Expose" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0" ToolTip="Take an exposure after each focus movement."/>
+                            <CheckBox Grid.Column="2" Content="Expose" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0" ToolTip="Take an exposure after each focus movement."><CheckBox.Style><Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></CheckBox.Style></CheckBox>
                         </Grid>
                         <WrapPanel Margin="0,6,0,0">
                             <WrapPanel.Style><Style TargetType="WrapPanel">
-                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
                             </Style></WrapPanel.Style>
                             <StackPanel Orientation="Horizontal" Margin="0,0,10,3">
                                 <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
@@ -182,34 +183,51 @@
                     </StackPanel>
                 </Border>
                 </local:FocusCardsPanel>
-                <Expander x:Name="FocusAssistExpander" Header="Fast focus / Bahtinov" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6">
-                    <Expander.Style><Style TargetType="Expander"><Setter Property="IsExpanded" Value="False"/><Style.Triggers>
-                        <DataTrigger Binding="{Binding IsFocusAssistRunning}" Value="True"><Setter Property="IsExpanded" Value="True"/></DataTrigger>
+                <Expander x:Name="FocusAssistExpander" Header="Bahtinov options" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6">
+                    <Expander.Style><Style TargetType="Expander"><Setter Property="IsExpanded" Value="False"/><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+                        <DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
                     </Style.Triggers></Style></Expander.Style>
                     <Border Style="{StaticResource FocusCard}" Margin="0,4,0,0">
                         <StackPanel>
-                            <WrapPanel>
+                            <WrapPanel Margin="0,0,0,5">
                                 <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="48" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
-                                <TextBlock Text="ROI center %" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" ToolTip="Star horizontal position as a percentage of the full image." Margin="0,0,3,3"/>
-                                <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}" ToolTip="Star vertical position as a percentage of the full image." Margin="0,0,8,3"/>
-                                <CheckBox Content="Analyze mask" IsChecked="{Binding AnalyzeBahtinov}" Margin="0,0,8,3" VerticalAlignment="Center"/>
-                                <Button Content="Start" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                                <Button Content="Stop" Command="{Binding StopFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                                <Button Content="In" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Move by the manual Step between preview exposures."/>
-                                <Button Content="Out" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Move by the manual Step between preview exposures."/>
+                                <TextBox Width="50" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,0"/>
+                                <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" Margin="0,0,3,0"/>
+                                <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}"/>
                             </WrapPanel>
+
                             <CheckBox Content="Bahtinov mask installed; isolated star centered" IsChecked="{Binding BahtinovMaskConfirmed}" Margin="0,2,0,4"
                                       ToolTip="Required for experimental autofocus. Scan uses NINA autofocus step size and initial offset count; current filter stays selected."/>
                             <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
-                            <Image Source="{Binding FocusPreviewImage}" Stretch="Uniform" MaxHeight="240" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            <Image Source="{Binding FocusPreviewImage}" MaxHeight="180" Stretch="Uniform"/>
+
                         </StackPanel>
                     </Border>
                 </Expander>
+                <Border>
+                    <Border.Style><Style TargetType="Border" BasedOn="{StaticResource FocusCard}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style>
+                    <StackPanel>
+                        <WrapPanel>
+                            <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBox Width="50" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
+                            <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" Margin="0,0,3,3"/>
+                            <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
+                            <Button Content="Start live" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                            <Button Content="Stop live" Command="{Binding StopFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                            <TextBlock Text="Step" VerticalAlignment="Center" Margin="4,0,5,0"/>
+                            <TextBox Width="48" Text="{Binding UserStep, UpdateSourceTrigger=LostFocus}" Margin="0,0,4,3"/>
+                            <Button Content="In" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                            <Button Content="Out" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
+                            <CheckBox Content="Bahtinov overlay" IsChecked="{Binding AnalyzeBahtinov}" VerticalAlignment="Center" Margin="4,0,0,3"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
             </ScrollViewer>
-            <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140">
+            <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140"><Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
                 <Grid Margin="0,0,0,5">
                     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -367,6 +385,26 @@
                         Y="{Binding MinHFR}" />
                 </oxy:Plot.Annotations>
             </oxy:Plot>
+            </Grid>
+            <Grid Grid.Row="1" MinHeight="140">
+                <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Grid.Style>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,5">
+                    <Button DockPanel.Dock="Right" Content="Clear live graph" Command="{Binding ClearLiveGraphCommand}" Style="{StaticResource FocusButton}"/>
+                    <TextBlock Text="{Binding LiveHfr, StringFormat='Local HFR: {0:F2} px'}" VerticalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/>
+                </DockPanel>
+                <Grid Grid.Row="1" Margin="0,0,6,0"><Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Image Source="{Binding FocusPreviewImage}" Stretch="Uniform"/>
+                    <oxy:Plot Grid.Row="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
+                        <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Star profile (px)" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/><oxy:LinearAxis Position="Left" Minimum="0" Maximum="1.1" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/></oxy:Plot.Axes>
+                        <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveStarProfile}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}"/></oxy:Plot.Series>
+                    </oxy:Plot>
+                </Grid>
+                <oxy:Plot Grid.Row="1" Grid.Column="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
+                    <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Elapsed seconds" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/><oxy:LinearAxis Position="Left" Title="Local HFR (px)" Minimum="0" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/></oxy:Plot.Axes>
+                    <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveHfrPoints}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}" StrokeThickness="2"/></oxy:Plot.Series>
+                </oxy:Plot>
             </Grid>
         </Grid>
 </UserControl>
