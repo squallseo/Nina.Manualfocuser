@@ -571,6 +571,8 @@ they use example stars and a placeholder chart, not a running NINA screen.
 
 ## Fast focus preview and experimental Bahtinov autofocus
 
+실제 장비 PC에서 작업을 이어갈 때는 [현재 상태와 빌드·배포·검증 인계 문서](Docs/HardwareHandoff.md)를 참고하세요.
+
 Select **Live focus** in the focus mode list, then click **Start live** for repeated
 preview exposures. Default exposure is 250 ms; 100–500 ms is useful for bright stars,
 with 1–5000 ms configurable within the camera's supported exposure range. This mode
