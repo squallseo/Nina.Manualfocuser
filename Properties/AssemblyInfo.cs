@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -21,10 +21,10 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCompany("cwseo")]
 // The product name that this plugin is part of
 [assembly: AssemblyProduct("manual focuser")]
-[assembly: AssemblyCopyright("Copyright © 2026 cwseo")]
+[assembly: AssemblyCopyright("Copyright © 2026 cwseo and RTG")]
 
 // The minimum Version of N.I.N.A. that this plugin is compatible with
-[assembly: AssemblyMetadata("MinimumApplicationVersion", "3.0.0.2017")]
+[assembly: AssemblyMetadata("MinimumApplicationVersion", "3.2.0.9001")]
 
 // The license your plugin code is using
 [assembly: AssemblyMetadata("License", "MPL-2.0")]
@@ -59,7 +59,7 @@ Also, since it searches only based on star HFR, when trying to find a truly bett
 
 the user ends up fine-tuning by checking additional cues such as star shapes near the edges, spikes, and other details.
 
-I want to create an environment that makes this process more convenient, 
+I want to create an environment that makes this process more convenient,
 
 and further, to build the foundation for eventually automating it.")]
 

@@ -65,5 +65,13 @@
     <Setting Name="WriteSpikeDiagnostics" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+	<Setting Name="UseOnePass" Type="System.Boolean" Scope="User">
+	  <Value Profile="(Default)">False</Value>
+	</Setting>
+    <Setting Name="PrepareImage" Type="System.Boolean" Scope="User"><Value Profile="(Default)">False</Value></Setting>
+    <Setting Name="Stretchfactor" Type="System.Double" Scope="User"><Value Profile="(Default)">0.12</Value></Setting>
+    <Setting Name="Blackclipping" Type="System.Double" Scope="User"><Value Profile="(Default)">-2.8</Value></Setting>
+    <Setting Name="FocusStopPosition" Type="System.Int32" Scope="User"><Value Profile="(Default)">5000</Value></Setting>
+    <Setting Name="CalibrationLargeSteps" Type="System.Int32" Scope="User"><Value Profile="(Default)">20</Value></Setting>
   </Settings>
 </SettingsFile>

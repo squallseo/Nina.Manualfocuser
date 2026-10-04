@@ -1,3 +1,9 @@
+using Accord.Statistics.Moving;
+using Grpc.Core;
+using Newtonsoft.Json.Linq;
+using NINA.Astrometry;
+using NINA.Astrometry.Interfaces;
+using NINA.Core.Enum;
 using NINA.Core.Interfaces;
 using NINA.Core.Locale;
 using NINA.Core.Model;
@@ -48,7 +54,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private readonly ITelescopeMediator telescopeMediator;
         private readonly IGuiderMediator guiderMediator;
         private readonly ManualFocuserModel DataModel;
-
+        // Add a field to hold the handler so we can unsubscribe
+        private readonly Func<Task> linearAfHandler;
         public FocuserInfo FocuserInfo { get; private set; }
         public TelescopeInfo TelescopeInfo { get; private set; }
         public CameraInfo CameraInfo { get; private set; }
@@ -92,6 +99,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(TakeShootAfterMove));
             }
         }
+        public bool UseOnePass {
+            get {
+                return Properties.Settings.Default.UseOnePass;
+            }
+            set {
+                Properties.Settings.Default.UseOnePass = value; // Settings에 저장
+                Properties.Settings.Default.Save(); // 저장 반영
+                RaisePropertyChanged(nameof(UseOnePass));
+            }
+        }
 
         public bool IsMoving {
             get => _moving;
@@ -116,7 +133,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(MinHFR));
             }
         }
-
+        public double MaxHFR {
+            get => this.DataModel.MaxHFR;
+            set {
+                this.DataModel.MaxHFR = value;
+                RaisePropertyChanged(nameof(MaxHFR));
+            }
+        }
         public double MinStep {
             get => this.DataModel.MinStep;
             set {
@@ -171,6 +194,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             }
         }
 
+        public double MaxStep {
+            get => this.DataModel.MaxStep;
+            set {
+                this.DataModel.MaxStep = value;
+                RaisePropertyChanged(nameof(MaxStep));
+            }
+        }
         public double StepDelta {
             get => this.DataModel.StepDelta;
             set {
@@ -186,6 +216,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(HFRDelta));
             }
         }
+        // Expose per-pass collections for the view to bind separate series
+        public AsyncObservableCollection<DataPoint> PlotFocusPointsPrimary => this.DataModel.PlotFocusPointsPrimary;
+        public AsyncObservableCollection<DataPoint> PlotFocusPointsSecondary => this.DataModel.PlotFocusPointsSecondary;
+        public AsyncObservableCollection<DataPoint> FitCurvePointsPrimary => this.DataModel.FitCurvePointsPrimary;
+        public AsyncObservableCollection<DataPoint> FitCurvePointsSecondary => this.DataModel.FitCurvePointsSecondary;
 
         public AsyncObservableCollection<ScatterErrorPoint> HFRFocusPoints => this.DataModel.HFRFocusPoints;
         public AsyncObservableCollection<ScatterErrorPoint> SpikeFocusPoints => this.DataModel.SpikeFocusPoints;
@@ -195,6 +230,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ICommand UseMeasuredAngleCommand { get; private set; }
         public ICommand ClearChartCommand { get; private set; }
         public ICommand InputResetCommand { get; private set; }
+        public ICommand LinearAFCommand { get; private set; }
         public ICommand HaltFocuserCommand { get; private set; }
         public ICommand MoveToPositionCommand { get; private set; }
         public ICommand MoveINCommand { get; private set; }
@@ -219,6 +255,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.telescopeMediator = telescopeMediator;
             this.filterWheelMediator = filterWheelMediator;
             this.guiderMediator = guiderMediator;
+
+            // Ensure static plugin helpers have the mediators so static calls won't NRE
+            Cwseo.NINA.ManualFocuser.ManualFocuser.Camera = cameraMediator;
+            Cwseo.NINA.ManualFocuser.ManualFocuser.Focuser = focuserMediator;
 
             Title = "Manual Focuser";
 
@@ -268,12 +308,17 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.cameraMediator.RegisterConsumer(this);
             this.filterWheelMediator.RegisterConsumer(this);
             this.guiderMediator.RegisterConsumer(this);
+            this.linearAfHandler = () => RunGuarded("Linear AF", ExecuteLinearAFAsync);
+            ManualFocuser.LinearAFRequested += this.linearAfHandler;
+            LinearAFCommand = new AsyncCommand<int>(() => RunGuarded("Linear AF", ExecuteLinearAFAsync), o => CanMove() && CameraInfo?.Connected == true);
         }
 
         public void Dispose() {
             if (disposed) return;
             disposed = true;
 
+            // On shutdown cleanup
+            try { Cwseo.NINA.ManualFocuser.ManualFocuser.LinearAFRequested -= this.linearAfHandler; } catch { }
             try { this.moveCts?.Cancel(); } catch { }
             try { this.moveCts?.Dispose(); } catch { }
             try { this.captureCts?.Cancel(); } catch { }
@@ -392,7 +437,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private void ResetCaptureCts() {
             try { captureCts?.Cancel(); } catch { }
             try { captureCts?.Dispose(); } catch { }
-            captureCts = new CancellationTokenSource();
+            captureCts = moveCts == null ? new CancellationTokenSource() : CancellationTokenSource.CreateLinkedTokenSource(moveCts.Token);
         }
 
         // ==============================================================
@@ -405,6 +450,86 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 await CaptureFirstPoint();
                 await focuserMediator.MoveFocuser(Properties.Settings.Default.TargetPosition, moveCts.Token);
                 return await ExecuteShootAsync();
+            } finally {
+                IsMoving = false;
+            }
+        }
+
+        private async Task<int> ExecuteLinearAFInternalAsync() {
+            ResetCts();
+            // start fresh and ensure per-pass collections cleared
+            this.DataModel.CurrentPass = 0;
+            this.DataModel.ResetPlotData();
+
+            await CaptureFirstPoint();
+
+            if(MinHFR==0) {
+                Notification.ShowError($"Error during ExecuteLinearAFAsync: No stars detected. Move focuser manually (In/Out) until HFR is not zero.");
+                return await Task.FromResult(0);
+            }
+
+            // start fresh and ensure per-pass collections cleared
+            this.DataModel.CurrentPass = 0;
+            this.DataModel.ResetPlotData();
+
+            // initial coarse move: primary pass (CurrentPass == 0)
+            await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps), moveCts.Token);
+            await ExecuteShootAsync();
+            for (int i = 0; i < this.DataModel.NumInitialSteps * 2; i++) {
+                await focuserMediator.MoveFocuserRelative(-Math.Abs(this.DataModel.AFStepSize), moveCts.Token);
+                await ExecuteShootAsync();
+            }
+
+            double focusMinHFR=MinHFR;
+            double focusMaxHFR=MaxHFR;
+
+            if (Properties.Settings.Default.UseOnePass) {
+                await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps * 2), moveCts.Token);
+
+                if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION) {
+                    //Logger.Info("OnePass " + MaxStep.ToString() + " " + FocuserInfo.Position.ToString());
+                    await focuserMediator.MoveFocuserRelative((int)MaxStep-FocuserInfo.Position, moveCts.Token);
+                } else {
+                    await focuserMediator.MoveFocuserRelative((int)MinStep - FocuserInfo.Position, moveCts.Token);
+                }
+                //return await Task.FromResult(0);
+                return await ExecuteShootAsync();
+            }
+
+            //await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps * 2), moveCts.Token);
+            //await ExecuteShootAsync();
+
+            // switch to fine pass
+            this.DataModel.CurrentPass = 1;
+            // ensure secondary cleared before fine pass
+            this.DataModel.ManualFocusPointsSecondary.Clear();
+            this.DataModel.PlotFocusPointsSecondary.Clear();
+            this.DataModel.FitCurvePointsSecondary.Clear();
+
+
+            for (int i = 0; i < this.DataModel.NumInitialSteps * 3; i++) {
+                await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize ), moveCts.Token);
+                await ExecuteShootAsync();
+                if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION) {
+                    if (this.DataModel.HFRFocusPoints.Last().Y > focusMaxHFR - (focusMaxHFR - focusMinHFR) * (1.0-profileService.ActiveProfile.FocuserSettings.RSquaredThreshold))
+                        break;
+                } else {
+                if (this.DataModel.HFRFocusPoints.Last().Y>0.0&&this.DataModel.HFRFocusPoints.Last().Y < focusMinHFR + (focusMaxHFR - focusMinHFR) * (1.0 - profileService.ActiveProfile.FocuserSettings.RSquaredThreshold))
+                        break;
+                }
+            }
+
+            return await ExecuteShootAsync();
+        }
+
+        private async Task<int> ExecuteLinearAFAsync() {
+            if (!CanMove() || CameraInfo?.Connected != true || !TakeShootAfterMove || !cameraMediator.IsFreeToCapture(this)) {
+                Notification.ShowWarning("Manual Focuser: Linear AF requires an idle camera, a connected focuser, and capture after move enabled");
+                return 0;
+            }
+            IsMoving = true;
+            try {
+                return await ExecuteLinearAFInternalAsync();
             } finally {
                 IsMoving = false;
             }
@@ -492,6 +617,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
 
         private void RaiseMeasurementProperties() {
+            RaisePropertyChanged(nameof(MaxStep));
+            RaisePropertyChanged(nameof(MaxHFR));
             RaisePropertyChanged(nameof(MinStep));
             RaisePropertyChanged(nameof(MinHFR));
             RaisePropertyChanged(nameof(StepDelta));
