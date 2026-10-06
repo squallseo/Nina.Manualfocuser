@@ -6,6 +6,9 @@
     <DataTemplate x:Key="Manual Focuser_Options">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="6" HorizontalAlignment="Left" MinWidth="320">
+                <TextBlock Text="Live focus" FontWeight="Bold" Margin="5,0,0,6"/>
+                <CheckBox Content="Use continuous camera streaming" IsChecked="{Binding UseFocusStreaming}" Margin="5,0,0,12"
+                          ToolTip="Applies on the next Start live. Unsupported cameras and QHY600M 3×3 bin mode use individual exposures."/>
 
                 <!-- Header -->
                 <StackPanel Orientation="Horizontal">

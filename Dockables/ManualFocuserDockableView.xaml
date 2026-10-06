@@ -1,18 +1,4 @@
-<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables"
-             xmlns:ninactrl="clr-namespace:NINA.CustomControlLibrary;assembly=NINA.CustomControlLibrary"
-             xmlns:enum="clr-namespace:NINA.Core.Enum;assembly=NINA.Core"
-             xmlns:ns="clr-namespace:NINA.Core.Locale;assembly=NINA.Core"
-             xmlns:oxy="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Contrib.Wpf"
-             xmlns:oxys="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Wpf.Shared"
-             xmlns:util="clr-namespace:NINA.Core.Utility;assembly=NINA.Core"
-             xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base"
-             mc:Ignorable="d"
-             d:DesignHeight="700" d:DesignWidth="650">
+<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables" xmlns:ninactrl="clr-namespace:NINA.CustomControlLibrary;assembly=NINA.CustomControlLibrary" xmlns:enum="clr-namespace:NINA.Core.Enum;assembly=NINA.Core" xmlns:ns="clr-namespace:NINA.Core.Locale;assembly=NINA.Core" xmlns:oxy="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Contrib.Wpf" xmlns:oxys="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Wpf.Shared" xmlns:util="clr-namespace:NINA.Core.Utility;assembly=NINA.Core" xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base" mc:Ignorable="d" d:DesignHeight="700" d:DesignWidth="650">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -20,62 +6,81 @@
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/SVGDictionary.xaml" />
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/Converters.xaml" />
                 <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/ProfileService.xaml" />
-                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/Styles/CheckBox.xaml"/>
+                <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/Styles/CheckBox.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="FocusRoiBrush" Color="#FFD54F" />
             <Style x:Key="FocusCard" TargetType="Border">
-                <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-                <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="CornerRadius" Value="8"/>
-                <Setter Property="Padding" Value="8"/>
-                <Setter Property="Margin" Value="0,0,0,6"/>
+                <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="8" />
+                <Setter Property="Margin" Value="0,0,0,6" />
+                <Setter Property="VerticalAlignment" Value="Top" />
             </Style>
             <Style TargetType="TextBox">
-                <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
-                <Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="MinHeight" Value="28"/>
-<Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}"/>
-                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-                <Setter Property="Padding" Value="6,3"/>
+                <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                <Setter Property="VerticalContentAlignment" Value="Center" /><Setter Property="VerticalAlignment" Value="Center" /><Setter Property="MinHeight" Value="28" />
+<Setter Property="CaretBrush" Value="{StaticResource PrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="Padding" Value="6,3" />
             </Style>
-            <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/></Style>
-            <Style TargetType="Expander"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/></Style>
+            <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" /></Style>
+            <Style TargetType="Expander"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" /></Style>
             <Style x:Key="FocusButton" TargetType="Button">
-                <Setter Property="MinHeight" Value="28"/>
-                <Setter Property="Padding" Value="9,3"/>
-                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
-                <Setter Property="Background" Value="{StaticResource ButtonBackgroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="Padding" Value="9,3" />
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                <Setter Property="Background" Value="{StaticResource ButtonBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Surface" Property="Background" Value="{StaticResource ButtonBackgroundSelectedBrush}"/>
-                                    <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}"/>
+                                    <Setter TargetName="Surface" Property="Background" Value="{StaticResource ButtonBackgroundSelectedBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}" />
                                 </Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SecondaryBrush}"/></Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SecondaryBrush}" /></Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Surface" Property="Background" Value="{StaticResource ButtonBackgroundBrush}"/>
-                                    <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}"/>
+                                    <Setter TargetName="Surface" Property="Background" Value="{StaticResource ButtonBackgroundBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource ButtonForegroundBrush}" />
                                 </Trigger>
-                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4"/></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4" /></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
+<Style x:Key="FocusSwitch" TargetType="ToggleButton">
+
+                                    <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11" />
+                                            <Border x:Name="Track" Width="30" Height="16" CornerRadius="8" Background="{StaticResource ButtonBackgroundBrush}" BorderBrush="{StaticResource SecondaryBrush}" BorderThickness="1">
+                                                <Ellipse x:Name="Thumb" Width="10" Height="10" Fill="{StaticResource PrimaryBrush}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0" />
+                                            </Border>
+                                        </StackPanel>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" /><Setter TargetName="Track" Property="Background" Value="{StaticResource SecondaryBrush}" /><Setter TargetName="Thumb" Property="Fill" Value="{StaticResource BackgroundBrush}" /></Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" /></Trigger>
+                                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate></Setter.Value></Setter>
+
+                                </Style>
         </ResourceDictionary>
     </UserControl.Resources>
         <Grid x:Name="LayoutRoot" Margin="6">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <ScrollViewer x:Name="ControlsScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
@@ -83,332 +88,253 @@
                 <Border Style="{StaticResource FocusCard}">
                     <StackPanel>
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <ComboBox x:Name="FocusModeSelector" SelectedValuePath="Tag" SelectedValue="{Binding FocusMode}" MinHeight="28" MinWidth="105"
-                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
-                                <ComboBoxItem Content="Manual focus" Tag="Manual"/>
-                                <ComboBoxItem Content="Auto focus" Tag="Auto"/>
-<ComboBoxItem Content="Live focus" Tag="Live"/>
+                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <ComboBox x:Name="FocusModeSelector" SelectedValuePath="Tag" SelectedValue="{Binding FocusMode}" MinHeight="28" MinWidth="105" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <ComboBoxItem Content="Manual focus" Tag="Manual" />
+                                <ComboBoxItem Content="Auto focus" Tag="Auto" />
+<ComboBoxItem Content="Live focus" Tag="Live" />
                             </ComboBox>
-                            <Button Grid.Column="1" Content="Use best" Command="{Binding InputResetCommand}" Margin="5,0,0,0"
-                                    IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}"
-                                    ToolTip="Set target to the best measured position and restore the configured step size.">
-                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
-                                    <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
-                                </Style></Button.Style>
-                            </Button>
-                            <CheckBox Grid.Column="2" Content="Expose" IsChecked="{Binding TakeShootAfterMove}" VerticalAlignment="Center" FontSize="11" Margin="6,0,0,0" ToolTip="Take an exposure after each focus movement."><CheckBox.Style><Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></CheckBox.Style></CheckBox>
+
+
                         </Grid>
+                        <WrapPanel Margin="0,10,0,4"><WrapPanel.Style><Style TargetType="WrapPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></WrapPanel.Style>
+                                <TextBlock Text="Step" Width="34" VerticalAlignment="Center" Foreground="{StaticResource SecondaryBrush}" Margin="0,0,0,3" />
+                                <TextBox Width="48" Text="{Binding UserStep, UpdateSourceTrigger=LostFocus}" VerticalContentAlignment="Center" Margin="0,0,4,3" />
+                                <Button Content="In −" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,3,3" />
+                                <Button Content="Out +" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,10,3" />
+                                <ToggleButton Content="Bahtinov overlay" IsChecked="{Binding AnalyzeBahtinov, Mode=TwoWay}" Style="{StaticResource FocusSwitch}" AutomationProperties.Name="Bahtinov overlay" MinHeight="28" ToolTip="바흐티노프 마스크를 장착한 별 영상에서 세 회절선과 부호 있는 초점 오차를 표시합니다. 마스크가 없으면 사용하지 마세요. 이 옵션은 표시와 분석만 수행하며 포커서를 자동 이동하지 않습니다." VerticalAlignment="Center" Margin="0,0,0,3" />
+                            </WrapPanel>
                         <WrapPanel Margin="0,6,0,0">
                             <WrapPanel.Style><Style TargetType="WrapPanel">
-                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
                             </Style></WrapPanel.Style>
                             <StackPanel Orientation="Horizontal" Margin="0,0,10,3">
-                                <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
-                                <TextBox Width="70" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}"/>
-                                <Button Style="{StaticResource FocusButton}" Content="Move" Margin="4,0,0,0" Command="{Binding MoveToPositionCommand}"/>
+                                <TextBlock Text="Target" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}" />
+                                <TextBox Width="70" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding TargetPosition, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Style="{StaticResource FocusButton}" Content="Move" Margin="4,0,0,0" Command="{Binding MoveToPositionCommand}" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                                <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
-                                <TextBox Width="52" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}"/>
-                                <Button Style="{StaticResource FocusButton}" Content="In −" Margin="4,0,0,0" Command="{Binding MoveINCommand}"/>
-                                <Button Style="{StaticResource FocusButton}" Content="Out +" Margin="4,0,0,0" Command="{Binding MoveOUTCommand}"/>
+                                <TextBlock Text="Step" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}" />
+                                <TextBox Width="52" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding UserStep, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Style="{StaticResource FocusButton}" Content="In −" Margin="4,0,0,0" Command="{Binding MoveINCommand}" />
+                                <Button Style="{StaticResource FocusButton}" Content="Out +" Margin="4,0,0,0" Command="{Binding MoveOUTCommand}" />
                             </StackPanel>
-                        </WrapPanel>
+                        <Button Content="Use best" Command="{Binding InputResetCommand}" Margin="6,0,0,3" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}" ToolTip="Set target to the best measured position and restore the configured step size.">
+                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
+                                    <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Live"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
+                                </Style></Button.Style>
+                            </Button><ToggleButton Content="Expose" IsChecked="{Binding TakeShootAfterMove, Mode=TwoWay}" Margin="6,0,0,3" VerticalAlignment="Center" MinHeight="28" AutomationProperties.Name="Expose after manual focus movement" ToolTip="Take an exposure after each manual focus movement.">
+                                <ToggleButton.Style><Style TargetType="ToggleButton" BasedOn="{StaticResource FocusSwitch}"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Manual"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></ToggleButton.Style>
+                            </ToggleButton></WrapPanel>
                         <WrapPanel Margin="0,6,0,0">
                             <WrapPanel.Style><Style TargetType="WrapPanel">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers><DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
                             </Style></WrapPanel.Style>
-                            <ComboBox x:Name="AfAlgorithmSelector" MinWidth="110" MinHeight="28" SelectedValuePath="Tag" SelectedValue="Linear" Margin="0,0,5,3"
-                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
-                                <ComboBoxItem Content="Linear scan" Tag="Linear"/>
-                                <ComboBoxItem Content="Bahtinov scan (experimental)" Tag="Bahtinov"/>
+                            <ComboBox x:Name="AfAlgorithmSelector" MinWidth="110" MinHeight="28" SelectedValuePath="Tag" SelectedValue="Linear" Margin="0,0,5,3" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <ComboBoxItem Content="Linear AF (HFR)" Tag="Linear" ToolTip="Scan focuser positions and fit the HFR focus curve." />
+                                <ComboBoxItem Content="Bahtinov" Tag="Bahtinov" ToolTip="Find zero focus error using a Bahtinov mask and live preview." />
+                                <ComboBoxItem Content="Spike" Tag="Spike" ToolTip="Find the diffraction-spike width minimum with live preview." />
                             </ComboBox>
-                            <Button Content="Run autofocus" Command="{Binding LinearAFCommand}" Margin="0,0,0,3">
-                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}"><Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                                </Style.Triggers></Style></Button.Style>
+                            <Button Content="Run autofocus" Margin="0,0,0,3">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
+                                        <Setter Property="Command" Value="{Binding LinearAFCommand}" />
+                                        <Setter Property="ToolTip" Value="Run the selected autofocus method." />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov">
+                                                <Setter Property="Command" Value="{Binding BahtinovAFCommand}" />
+                                                <Setter Property="ToolTip" Value="Install a Bahtinov mask and center an isolated star in the ROI. Detection is checked before the focuser moves." />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Spike">
+                                                <Setter Property="Command" Value="{Binding SpikeAFCommand}" />
+                                                <Setter Property="ToolTip" Value="Center an isolated unsaturated star with clear diffraction spikes in the ROI." />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
                             </Button>
-                            <Button Content="Run Bahtinov AF" Command="{Binding BahtinovAFCommand}" Margin="0,0,0,3">
-                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
-                                </Style.Triggers></Style></Button.Style>
-                            </Button>
-                            <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="8,0,0,3" VerticalAlignment="Center"
-                                      IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
-                                <CheckBox.Style><Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/><Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                                </Style.Triggers></Style></CheckBox.Style>
+                            <CheckBox Content="Single pass" IsChecked="{Binding UseOnePass}" Margin="8,0,0,3" VerticalAlignment="Center" IsEnabled="{Binding IsMoving, Converter={StaticResource InverseBooleanConverter}}">
+                                <CheckBox.Style><Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" /><Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Bahtinov"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedValue, ElementName=AfAlgorithmSelector}" Value="Spike"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></CheckBox.Style>
                             </CheckBox>
                         </WrapPanel>
-                    </StackPanel>
+                    <Border Margin="0,8,0,0" Padding="0,8,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"><StackPanel x:Name="SharedCaptureControls" Margin="0">
+
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="52" /><ColumnDefinition Width="22" /></Grid.ColumnDefinitions>
+                                <Button Width="36" Height="32" Padding="5" Margin="0,0,8,0" ToolTipService.ShowOnDisabled="True">
+                                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Setter Property="Command" Value="{Binding StartFocusPreviewCommand}" />
+                                        <Setter Property="ToolTip" Value="Start live focus" />
+                                        <Setter Property="AutomationProperties.Name" Value="Start live focus" />
+                                        <Style.Triggers><MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding FocusMode}" Value="Auto" /><Condition Binding="{Binding IsFocusAssistRunning}" Value="True" /></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible" /></MultiDataTrigger><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding IsFocusAssistRunning}" Value="True"><Setter Property="Command" Value="{Binding StopFocusPreviewCommand}" /><Setter Property="ToolTip" Value="Stop live focus" /><Setter Property="AutomationProperties.Name" Value="Stop live focus" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding IsStoppingFocusPreview}" Value="True"><Setter Property="IsEnabled" Value="False" /><Setter Property="ToolTip" Value="Stopping; waiting for the camera" /><Setter Property="AutomationProperties.Name" Value="Stopping live focus" /></DataTrigger>
+                                        <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding FocusMode}" Value="Auto" /><Condition Binding="{Binding IsFocusAssistRunning}" Value="True" /></MultiDataTrigger.Conditions><Setter Property="ToolTip" Value="Stop autofocus / live preview" /><Setter Property="AutomationProperties.Name" Value="Stop autofocus / live preview" /></MultiDataTrigger></Style.Triggers>
+                                    </Style></Button.Style>
+                                    <Viewbox Width="18" Height="18" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Path Stretch="Uniform" UseLayoutRounding="True" SnapsToDevicePixels="True" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                        <Path.Style><Style TargetType="Path">
+                                            <Setter Property="Data" Value="M 1,2 L 13,2 Q 15,2 15,4 L 15,12 Q 15,14 13,14 L 1,14 Q 0,14 0,12 L 0,4 Q 0,2 1,2 Z M 16,5 L 22,2 L 22,14 L 16,11 Z" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsFocusAssistRunning}" Value="True"><Setter Property="Data" Value="{StaticResource CancelSVG}" /></DataTrigger>
+                                                <DataTrigger Binding="{Binding IsStoppingFocusPreview}" Value="True"><Setter Property="Data" Value="{StaticResource HourglassSVG}" /></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style></Path.Style>
+                                    </Path>
+                                    </Viewbox>
+                                </Button>
+                                <TextBlock Grid.Column="1" Text="Exposure" VerticalAlignment="Center" Foreground="{StaticResource SecondaryBrush}" Margin="0,0,4,0" />
+                                <Slider Grid.Column="2" Minimum="1" Maximum="5000" SmallChange="50" LargeChange="50" TickFrequency="50" IsSnapToTickEnabled="True" Ticks="1,50,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000,1050,1100,1150,1200,1250,1300,1350,1400,1450,1500,1550,1600,1650,1700,1750,1800,1850,1900,1950,2000,2050,2100,2150,2200,2250,2300,2350,2400,2450,2500,2550,2600,2650,2700,2750,2800,2850,2900,2950,3000,3050,3100,3150,3200,3250,3300,3350,3400,3450,3500,3550,3600,3650,3700,3750,3800,3850,3900,3950,4000,4050,4100,4150,4200,4250,4300,4350,4400,4450,4500,4550,4600,4650,4700,4750,4800,4850,4900,4950,5000" Value="{Binding PreviewExposureMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigureLive}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBox Grid.Column="3" Text="{Binding PreviewExposureMs, StringFormat=F0, UpdateSourceTrigger=LostFocus}" IsEnabled="{Binding CanConfigureLive}" VerticalContentAlignment="Center" MinHeight="26" />
+                                <TextBlock Grid.Column="4" Text="ms" Margin="4,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SecondaryBrush}" />
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Button Margin="0,0,10,0">
+                                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}">
+                                        <Setter Property="Content" Value="Select ROI" /><Setter Property="Command" Value="{Binding SelectRoiCommand}" />
+                                        <Setter Property="ToolTip" Value="Open the full image to move or resize the star area with the mouse." />
+                                        <Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Content" Value="Retake image" /><Setter Property="Command" Value="{Binding RefreshRoiImageCommand}" /><Setter Property="ToolTip" Value="Take a new full image if the displayed image is out of date." /></DataTrigger></Style.Triggers>
+                                    </Style></Button.Style>
+                                </Button>
+                                <TextBlock Grid.Column="1" Text="Area" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}" />
+                                <ComboBox Grid.Column="2" SelectedValuePath="Tag" SelectedValue="{Binding PreviewRoiPreset, Mode=TwoWay}" IsEnabled="{Binding CanConfigureLive}" MinHeight="28" ToolTip="Size of the area around the selected star.">
+                                    <ComboBoxItem Content="256 px" Tag="256" /><ComboBoxItem Content="512 px" Tag="512" /><ComboBoxItem Content="1024 px" Tag="1024" /><ComboBoxItem Content="Custom" Tag="Custom" />
+                                </ComboBox>
+<Button Grid.Column="3" Content="Done" Command="{Binding ConfirmRoiCommand}" HorizontalAlignment="Right" Margin="6,0,0,0">
+                                    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource FocusButton}"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Button.Style>
+                                </Button>
+                            </Grid>
+                            <TextBlock Text="Drag inside the box to move it. Drag an edge or corner to resize, then Done." TextWrapping="Wrap" Margin="0,0,0,6" FontSize="11" Foreground="{StaticResource SecondaryBrush}">
+                                <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                            </TextBlock>
+
+
+                            <Image Source="{Binding RoiSelectionPreview}" Height="70" Stretch="Uniform" Margin="0,4,0,0" ToolTip="Selection zoom from the reduced full-frame image.">
+                                <Image.Style><Style TargetType="Image"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Image.Style>
+                            </Image>
+                        </StackPanel></Border></StackPanel>
                 </Border>
-                <Border Grid.Row="1" Style="{StaticResource FocusCard}">
+                <StackPanel Grid.Row="1">
+                <Border Style="{StaticResource FocusCard}">
                     <StackPanel>
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="Focus star" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="Focus star" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBlock Text="Alt ≥" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}"/>
-                                <TextBox Width="38" MinHeight="26" VerticalContentAlignment="Center" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}" ToolTip="Minimum star altitude; refresh after changing this value."/>
-                                <TextBlock Text="°" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                                <TextBlock Text="Alt ≥" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{StaticResource SecondaryBrush}" />
+                                <TextBox Width="38" MinHeight="26" VerticalContentAlignment="Center" Text="{Binding MinimumFocusAltitude, UpdateSourceTrigger=LostFocus}" ToolTip="Minimum star altitude; refresh after changing this value." />
+                                <TextBlock Text="°" VerticalAlignment="Center" Margin="3,0,0,0" />
                             </StackPanel>
                         </Grid>
                         <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <ComboBox MinHeight="28" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" MaxDropDownHeight="240"
-                                      ToolTip="Select a focus star. The list loads automatically when this panel opens.">
-                                <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis"/></DataTemplate></ComboBox.ItemTemplate>
+                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <ComboBox MinHeight="28" ItemsSource="{Binding FocusTargets}" SelectedItem="{Binding SelectedFocusTarget}" MaxDropDownHeight="240" ToolTip="Select a focus star. The list loads automatically when this panel opens.">
+                                <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
                             </ComboBox>
-                            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshFocusTargetsCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" ToolTip="Refresh visible focus stars using the current time and profile location."/>
-                            <Button Grid.Column="2" Content="GOTO" Command="{Binding GotoFocusTargetCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
-                                    ToolTip="Go to the selected star. Connect and unpark the mount; disconnect the guider. Capture and focus operations must be idle."/>
+                            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshFocusTargetsCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" ToolTip="Refresh visible focus stars using the current time and profile location." />
+                            <Button Grid.Column="2" Content="GOTO" Command="{Binding GotoFocusTargetCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" ToolTip="Go to the selected star. Connect and unpark the mount; disconnect the guider. Capture and focus operations must be idle." />
                         </Grid>
                         <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding FocusTargetStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding FocusTargetStatus}" Foreground="{StaticResource SecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="Stop GOTO" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0"
-                                    Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
+                            <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding FocusTargetStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding FocusTargetStatus}" Foreground="{StaticResource SecondaryBrush}" FontSize="11" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="Stop GOTO" Command="{Binding CancelGotoCommand}" Style="{StaticResource FocusButton}" Margin="5,0,0,0" Visibility="{Binding IsGoingToFocusTarget, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}" />
                         </Grid>
-                        <Expander Header="Spike analysis" IsExpanded="False" Margin="0,4,0,0"
-                                  Visibility="{Binding IsSpikeMetricEnabled, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}">
+
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource FocusCard}">
+                        <StackPanel><TextBlock Text="Spike analysis" FontWeight="SemiBold" FontSize="13"/>
                             <WrapPanel Margin="0,6,0,0">
-                                <TextBlock Text="Angle" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="50" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding SpikeAngle, UpdateSourceTrigger=LostFocus}"/>
-                                <CheckBox Content="Auto" IsChecked="{Binding AutoSpikeAngle}" VerticalAlignment="Center" Margin="8,0"/>
-                                <TextBlock Text="{Binding MeasuredAngleText}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <Button Content="Use angle" Command="{Binding UseMeasuredAngleCommand}" Style="{StaticResource FocusButton}"/>
+                                <TextBlock Text="Angle" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                <TextBox Width="50" MinHeight="28" VerticalContentAlignment="Center" Text="{Binding SpikeAngle, UpdateSourceTrigger=LostFocus}" />
+                                <CheckBox Content="Auto" IsChecked="{Binding AutoSpikeAngle}" VerticalAlignment="Center" Margin="8,0" />
+                                <TextBlock Text="{Binding MeasuredAngleText}" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                <Button Content="Use angle" Command="{Binding UseMeasuredAngleCommand}" Style="{StaticResource FocusButton}" />
                             </WrapPanel>
-                        </Expander>
-                    </StackPanel>
-                </Border>
-                </local:FocusCardsPanel>
-                <Expander x:Name="FocusAssistExpander" Header="Bahtinov options" Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6">
-                    <Expander.Style><Style TargetType="Expander"><Setter Property="IsExpanded" Value="False"/><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
-                        <DataTrigger Binding="{Binding SelectedValue, ElementName=FocusModeSelector}" Value="Auto"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
-                    </Style.Triggers></Style></Expander.Style>
-                    <Border Style="{StaticResource FocusCard}" Margin="0,4,0,0">
-                        <StackPanel>
-                            <WrapPanel Margin="0,0,0,5">
-                                <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="50" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,0"/>
-                                <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" Margin="0,0,3,0"/>
-                                <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}"/>
-                            </WrapPanel>
-
-                            <CheckBox Content="Bahtinov mask installed; isolated star centered" IsChecked="{Binding BahtinovMaskConfirmed}" Margin="0,2,0,4"
-                                      ToolTip="Required for experimental autofocus. Scan uses NINA autofocus step size and initial offset count; current filter stays selected."/>
-                            <TextBlock Text="{Binding RoiLocationText}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
-<TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
-                            <Image Source="{Binding FocusPreviewImage}" MaxHeight="180" Stretch="Uniform"/>
-
                         </StackPanel>
-                    </Border>
-                </Expander>
-                <Border>
-                    <Border.Style><Style TargetType="Border" BasedOn="{StaticResource FocusCard}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Border.Style>
-                    <StackPanel>
-                        <WrapPanel>
-                            <TextBlock Text="Exposure ms" VerticalAlignment="Center" Margin="0,0,5,3"/>
-                            <TextBox Width="50" Text="{Binding PreviewExposureMs, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
-                            <TextBlock Text="ROI X/Y %" VerticalAlignment="Center" Margin="0,0,5,3"/>
-                            <TextBox Width="40" Text="{Binding PreviewCenterX, UpdateSourceTrigger=LostFocus}" Margin="0,0,3,3"/>
-                            <TextBox Width="40" Text="{Binding PreviewCenterY, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,3"/>
-                            <Button Content="Select ROI" Command="{Binding SelectRoiCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3" ToolTip="Stop live first. Capture the full frame, then click a star to select its ROI."/>
-<Button Content="Start live" Command="{Binding StartFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                            <Button Content="Stop live" Command="{Binding StopFocusPreviewCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                            <TextBlock Text="Step" VerticalAlignment="Center" Margin="4,0,5,3"/>
-                            <TextBox Width="48" Text="{Binding UserStep, UpdateSourceTrigger=LostFocus}" Margin="0,0,4,3"/>
-                            <Button Content="In" Command="{Binding PreviewMoveInCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                            <Button Content="Out" Command="{Binding PreviewMoveOutCommand}" Style="{StaticResource FocusButton}" Margin="0,0,4,3"/>
-                            <CheckBox Content="Bahtinov overlay" IsChecked="{Binding AnalyzeBahtinov}" VerticalAlignment="Center" Margin="4,0,0,3"/>
-                        </WrapPanel>
-                        <TextBlock Text="{Binding RoiLocationText}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
-<TextBlock Text="{Binding FocusAssistStatus}" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}" FontSize="11"/>
-<TextBlock Text="{Binding LiveTimingText}" TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource SecondaryBrush}" ToolTip="Capture+download is measured end to end. Host download is the separate duration reported by NINA; it can overlap driver work and is not pure USB transfer time. Preview/graph measures CPU preparation, not physical display latency."/>
-                    </StackPanel>
                 </Border>
+                </StackPanel>
+                </local:FocusCardsPanel>
+
+
             </StackPanel>
             </ScrollViewer>
-            <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140"><Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+            <Grid x:Name="ChartArea" Grid.Row="1" MinHeight="140"><Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding AutoFocusPreviewVisible}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Grid.Style>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
                 <Grid Margin="0,0,0,5">
-                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <WrapPanel Margin="2,0,6,0" VerticalAlignment="Center" ToolTip="{Binding SpikeDisplayStatus}">
-                    <TextBlock Text="HFR  " Foreground="{StaticResource SecondaryBrush}"/>
-                    <TextBlock Text="{Binding MinHFR, StringFormat=F3}" FontWeight="SemiBold" Margin="0,0,10,0"/>
-                    <TextBlock Text="Pos  " Foreground="{StaticResource SecondaryBrush}"/>
-                    <TextBlock Text="{Binding MinStep}" Margin="0,0,10,0"/>
-                    <TextBlock Text="Δ  " Foreground="{StaticResource SecondaryBrush}"/>
-                    <TextBlock Text="{Binding HFRDelta, StringFormat=F3}"/>
+                    <TextBlock Text="HFR  " Foreground="{StaticResource SecondaryBrush}" />
+                    <TextBlock Text="{Binding MinHFR, StringFormat=F3}" FontWeight="SemiBold" Margin="0,0,10,0" />
+                    <TextBlock Text="Pos  " Foreground="{StaticResource SecondaryBrush}" />
+                    <TextBlock Text="{Binding MinStep}" Margin="0,0,10,0" />
+                    <TextBlock Text="Δ  " Foreground="{StaticResource SecondaryBrush}" />
+                    <TextBlock Text="{Binding HFRDelta, StringFormat=F3}" />
                 </WrapPanel>
-                    <Button Grid.Column="1" Content="Stop focus" Command="{Binding HaltFocuserCommand}" Style="{StaticResource FocusButton}" Margin="0,0,5,0"
-                            Visibility="{Binding IsMoving, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"/>
-                    <Button Grid.Column="2" Content="Clear chart" Command="{Binding ClearChartCommand}" Style="{StaticResource FocusButton}"/>
+                    <Button Grid.Column="1" Content="Stop focus" Command="{Binding HaltFocuserCommand}" Style="{StaticResource FocusButton}" Margin="0,0,5,0" Visibility="{Binding IsMoving, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}" />
+                    <Button Grid.Column="2" Content="Clear chart" Command="{Binding ClearChartCommand}" Style="{StaticResource FocusButton}" />
                 </Grid>
-            <oxy:Plot
-                Grid.Row="1" Margin="0,0,0,0"
-                Background="{StaticResource BackgroundBrush}"
-                PlotAreaBackground="{StaticResource BackgroundBrush}"
-                PlotAreaBorderColor="{Binding Path=Color, Source={StaticResource BorderBrush}}">
+            <oxy:Plot Grid.Row="1" Margin="0,0,0,0" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}" PlotAreaBorderColor="{Binding Path=Color, Source={StaticResource BorderBrush}}">
                 <oxy:Plot.Legends>
-                    <oxy:Legend
-                        IsLegendVisible="True"
-                        LegendBackground="{Binding Path=Color, Source={StaticResource BackgroundBrush}}"
-                        LegendBorder="{Binding Path=Color, Source={StaticResource BorderBrush}}"
-                        LegendFontSize="12"
-                        LegendMaxHeight="35"
-                        LegendOrientation="Horizontal"
-                        LegendPadding="2"
-                        LegendPlacement="Outside"
-                        LegendPosition="TopCenter"
-                        LegendSymbolLength="10"
-                        LegendTextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" />
+                    <oxy:Legend IsLegendVisible="True" LegendBackground="{Binding Path=Color, Source={StaticResource BackgroundBrush}}" LegendBorder="{Binding Path=Color, Source={StaticResource BorderBrush}}" LegendFontSize="12" LegendMaxHeight="35" LegendOrientation="Horizontal" LegendPadding="2" LegendPlacement="Outside" LegendPosition="TopCenter" LegendSymbolLength="10" LegendTextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" />
                 </oxy:Plot.Legends>
                 <oxy:Plot.Axes>
-                    <oxy:LinearAxis
-                    Title="Average HFR"
-                    TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    EndPosition="1"
-                    IsPanEnabled="False"
-                    IsZoomEnabled="True"
-                    MajorGridlineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}"
-                    MajorGridlineStyle="LongDash"
-                    MaximumPadding="0.1"
-                    MinimumPadding="0.1"
-                    Position="Left"
-                    StartPosition="0"
-                    TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
+                    <oxy:LinearAxis Title="Average HFR" TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" EndPosition="1" IsPanEnabled="False" IsZoomEnabled="True" MajorGridlineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}" MajorGridlineStyle="LongDash" MaximumPadding="0.1" MinimumPadding="0.1" Position="Left" StartPosition="0" TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
-                    <oxy:LinearAxis
-                    Title="Spike Metric"
-                    IsAxisVisible="{Binding HasSpikePoints}"
-                    TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                    AxislineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                    EndPosition="1"
-                    IsPanEnabled="False"
-                    IsZoomEnabled="False"
-                    MajorGridlineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}"
-                    MajorGridlineStyle="None"
-                    MaximumPadding="0.1"
-                    MinimumPadding="0.1"
-                    Key="SecondaryY"
-                    Position="Right"
-                    StartPosition="0"
-                    TextColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                    TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
+                    <oxy:LinearAxis Title="Spike Metric" IsAxisVisible="{Binding HasSpikePoints}" TitleColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}" AxislineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}" EndPosition="1" IsPanEnabled="False" IsZoomEnabled="False" MajorGridlineColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}" MajorGridlineStyle="None" MaximumPadding="0.1" MinimumPadding="0.1" Key="SecondaryY" Position="Right" StartPosition="0" TextColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}" TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
 
-                    <oxy:LinearAxis
-                    Title="Focuser Position"
-                    TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    EndPosition="1"
-                    IsPanEnabled="False"
-                    IsZoomEnabled="False"
-                    MajorGridlineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}"
-                    MajorGridlineStyle="LongDash"
-                    MaximumPadding="0.1"
-                    MinimumPadding="0.1"
-                    Position="Bottom"
-                    StartPosition="0"
-                    TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                    TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
+                    <oxy:LinearAxis Title="Focuser Position" TitleColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" AxislineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" EndPosition="1" IsPanEnabled="False" IsZoomEnabled="False" MajorGridlineColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}, Converter={StaticResource SetAlphaToColorConverter}, ConverterParameter=60}" MajorGridlineStyle="LongDash" MaximumPadding="0.1" MinimumPadding="0.1" Position="Bottom" StartPosition="0" TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" TicklineColor="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" />
                 </oxy:Plot.Axes>
                 <oxy:Plot.Series>
-                    <oxy:ScatterErrorSeries
-                        Title="HFR"
-                        ItemsSource="{Binding HFRFocusPoints}"
-                        MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                        ErrorBarColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                        MarkerSize="4"
-                        MarkerType="Circle"/>
-                    <oxy:ScatterErrorSeries
-                        Title="Spike"
-                        Visibility="{Binding HasSpikePoints, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}"
-                        YAxisKey="SecondaryY"
-                        ItemsSource="{Binding SpikeFocusPoints}"
-                        MarkerFill="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                        ErrorBarColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}"
-                        MarkerSize="5"
-                        MarkerType="Diamond"/>
+                    <oxy:ScatterErrorSeries Title="HFR" ItemsSource="{Binding HFRFocusPoints}" MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" ErrorBarColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" MarkerSize="4" MarkerType="Circle" />
+                    <oxy:ScatterErrorSeries Title="Spike" Visibility="{Binding HasSpikePoints, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}" YAxisKey="SecondaryY" ItemsSource="{Binding SpikeFocusPoints}" MarkerFill="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}" ErrorBarColor="{Binding Path=Color, Source={StaticResource NotificationWarningBrush}}" MarkerSize="5" MarkerType="Diamond" />
                     <!-- Primary pass (coarse) -->
-                    <oxy:ScatterSeries Title="Measured · coarse"
-                                       ItemsSource="{Binding PlotFocusPointsPrimary}"
-                                       DataFieldX="X"
-                                       DataFieldY="Y"
-                                       MarkerType="Circle"
-                                       MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                                       MarkerStroke="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                                       MarkerSize="5"
-                                       MarkerStrokeThickness="1"
-                                       TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
+                    <oxy:ScatterSeries Title="Measured · coarse" ItemsSource="{Binding PlotFocusPointsPrimary}" DataFieldX="X" DataFieldY="Y" MarkerType="Circle" MarkerFill="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" MarkerStroke="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" MarkerSize="5" MarkerStrokeThickness="1" TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
 
-                    <oxy:LineSeries Title="Quadratic · coarse"
-                                    ItemsSource="{Binding FitCurvePointsPrimary}"
-                                    DataFieldX="X"
-                                    DataFieldY="Y"
-                                    Color="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                                    StrokeThickness="1.5"
-                                    LineStyle="Solid"
-                                    CanTrackerInterpolatePoints="True"
-                                    TrackerFormatString="Fit (P0)\nPos: {2:0}\nHFR: {4:0.000}" />
+                    <oxy:LineSeries Title="Quadratic · coarse" ItemsSource="{Binding FitCurvePointsPrimary}" DataFieldX="X" DataFieldY="Y" Color="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" StrokeThickness="1.5" LineStyle="Solid" CanTrackerInterpolatePoints="True" TrackerFormatString="Fit (P0)\nPos: {2:0}\nHFR: {4:0.000}" />
 
                     <!-- Secondary pass (fine) -->
-                    <oxy:ScatterSeries Title="Measured · fine"
-                                       ItemsSource="{Binding PlotFocusPointsSecondary}"
-                                       DataFieldX="X"
-                                       DataFieldY="Y"
-                                       MarkerType="Square"
-                                       MarkerFill="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                                       MarkerStroke="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                                       MarkerSize="5"
-                                       MarkerStrokeThickness="1"
-                                       TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
+                    <oxy:ScatterSeries Title="Measured · fine" ItemsSource="{Binding PlotFocusPointsSecondary}" DataFieldX="X" DataFieldY="Y" MarkerType="Square" MarkerFill="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" MarkerStroke="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" MarkerSize="5" MarkerStrokeThickness="1" TrackerFormatString="Pos: {2:0}\nHFR: {4:0.000}" />
 
-                    <oxy:LineSeries Title="Quadratic · fine"
-                                    ItemsSource="{Binding FitCurvePointsSecondary}"
-                                    DataFieldX="X"
-                                    DataFieldY="Y"
-                                    Color="{Binding Path=Color, Source={StaticResource SecondaryBrush}}"
-                                    StrokeThickness="1.5"
-                                    LineStyle="Dash"
-                                    CanTrackerInterpolatePoints="True"
-                                    TrackerFormatString="Fit (P1)\nPos: {2:0}\nHFR: {4:0.000}" />
+                    <oxy:LineSeries Title="Quadratic · fine" ItemsSource="{Binding FitCurvePointsSecondary}" DataFieldX="X" DataFieldY="Y" Color="{Binding Path=Color, Source={StaticResource SecondaryBrush}}" StrokeThickness="1.5" LineStyle="Dash" CanTrackerInterpolatePoints="True" TrackerFormatString="Fit (P1)\nPos: {2:0}\nHFR: {4:0.000}" />
                 </oxy:Plot.Series>
                 <oxy:Plot.Annotations>
-                    <oxy:PointAnnotation
-                        Fill="{Binding Path=Color, Source={StaticResource NotificationErrorBrush}}"
-                        Shape="Triangle"
-                        Size="8"
-                        Text="{Binding MinHFR, StringFormat=F3}"
-                        TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}"
-                        X="{Binding MinStep}"
-                        Y="{Binding MinHFR}" />
+                    <oxy:PointAnnotation Fill="{Binding Path=Color, Source={StaticResource NotificationErrorBrush}}" Shape="Triangle" Size="8" Text="{Binding MinHFR, StringFormat=F3}" TextColor="{Binding Path=Color, Source={StaticResource PrimaryBrush}}" X="{Binding MinStep}" Y="{Binding MinHFR}" />
                 </oxy:Plot.Annotations>
             </oxy:Plot>
             </Grid>
             <Grid Grid.Row="1" MinHeight="140">
-                <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Grid.Style>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,5">
-                    <Button DockPanel.Dock="Right" Content="Clear live graph" Command="{Binding ClearLiveGraphCommand}" Style="{StaticResource FocusButton}"/>
-                    <TextBlock Text="{Binding LiveHfrText}" VerticalAlignment="Center" Foreground="{StaticResource PrimaryBrush}"/>
+                <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding FocusMode}" Value="Live"><Setter Property="Visibility" Value="Visible" /></DataTrigger><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger><DataTrigger Binding="{Binding AutoFocusPreviewVisible}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Grid.Style>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,5"><DockPanel.Style><Style TargetType="DockPanel"><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></DockPanel.Style>
+                    <Button DockPanel.Dock="Right" Content="Clear live graph" Command="{Binding ClearLiveGraphCommand}" Style="{StaticResource FocusButton}" />
+                    <TextBlock Text="{Binding PreviewMetricText}" VerticalAlignment="Center" Foreground="{StaticResource PrimaryBrush}" ToolTip="Current focus measurement. The graph retains measurements from this run; gaps indicate frames without a valid detection." />
                 </DockPanel>
-                <Grid Grid.Row="1" Margin="0,0,6,0"><Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <Image Source="{Binding LiveDisplayImage}" Stretch="Uniform" MouseLeftButtonDown="OnPreviewClick" Cursor="Cross" ToolTip="{Binding RoiLocationText}"/>
+                <Grid Grid.Row="1" Margin="0,0,6,0"><Grid.RowDefinitions><RowDefinition Height="2*" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Grid.Style><Style TargetType="Grid"><Setter Property="Grid.ColumnSpan" Value="1" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Grid.ColumnSpan" Value="2" /></DataTrigger></Style.Triggers></Style></Grid.Style>
+                    <Grid x:Name="PreviewSurface" Background="Transparent" MouseLeftButtonDown="OnPreviewDown" MouseMove="OnPreviewMove" MouseLeftButtonUp="OnPreviewUp" LostMouseCapture="OnPreviewCaptureLost" SizeChanged="OnPreviewSizeChanged">
+                        <Grid.Style><Style TargetType="Grid"><Setter Property="Grid.RowSpan" Value="1" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Grid.RowSpan" Value="2" /></DataTrigger><DataTrigger Binding="{Binding AutoFocusPreviewVisible}" Value="True"><Setter Property="Grid.RowSpan" Value="2" /></DataTrigger></Style.Triggers></Style></Grid.Style>
+                        <Image x:Name="PreviewImage" Source="{Binding LiveDisplayImage}" SizeChanged="OnPreviewSizeChanged" Stretch="Uniform" ToolTip="{Binding RoiLocationText}">
+                            <Image.Style><Style TargetType="Image"><Setter Property="Margin" Value="0" /><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Margin" Value="0,28,0,28" /></DataTrigger></Style.Triggers></Style></Image.Style>
+                        </Image>
+                        <Canvas x:Name="RoiHandles" IsHitTestVisible="False" /><Canvas IsHitTestVisible="False"><Rectangle x:Name="RoiOutline" Visibility="Collapsed" Stroke="{StaticResource FocusRoiBrush}" StrokeThickness="3"><Rectangle.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="0" Opacity="1" /></Rectangle.Effect></Rectangle></Canvas>
+                    </Grid>
                     <oxy:Plot Grid.Row="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
-                        <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Star profile (px)" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/><oxy:LinearAxis Position="Left" Minimum="0" Maximum="1.1" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/></oxy:Plot.Axes>
-                        <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveStarProfile}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}"/></oxy:Plot.Series>
+                        <oxy:Plot.Style><Style TargetType="oxy:Plot"><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding AutoFocusPreviewVisible}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></oxy:Plot.Style>
+                        <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Star profile (px)" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}" /><oxy:LinearAxis Position="Left" Minimum="0" Maximum="1.1" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" /></oxy:Plot.Axes>
+                        <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveStarProfile}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}" /></oxy:Plot.Series>
                     </oxy:Plot>
                 </Grid>
                 <oxy:Plot Grid.Row="1" Grid.Column="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
-                    <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Elapsed seconds" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/><oxy:LinearAxis Position="Left" Title="Local HFR (px)" Minimum="0" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}"/></oxy:Plot.Axes>
-                    <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding LiveHfrPoints}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}" StrokeThickness="2"/></oxy:Plot.Series>
+                    <oxy:Plot.Style><Style TargetType="oxy:Plot"><Style.Triggers><DataTrigger Binding="{Binding IsSelectingRoi}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></oxy:Plot.Style>
+                    <oxy:Plot.Axes><oxy:LinearAxis Position="Bottom" Title="Elapsed seconds" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}" /><oxy:LinearAxis Position="Left" Title="{Binding PreviewAxisTitle}" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}" /></oxy:Plot.Axes>
+                    <oxy:Plot.Series><oxy:LineSeries ItemsSource="{Binding PreviewGraphPoints}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource SecondaryBrush}}" StrokeThickness="1" MarkerType="Circle" MarkerSize="2" MarkerFill="{Binding Color, Source={StaticResource SecondaryBrush}}" /></oxy:Plot.Series>
                 </oxy:Plot>
             </Grid>
         </Grid>

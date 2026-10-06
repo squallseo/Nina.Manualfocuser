@@ -21,6 +21,7 @@ using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Image.ImageAnalysis;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.Interfaces.ViewModel;
+using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.ViewModel;
 using NINA.WPF.Base.ViewModel.AutoFocus;
 using OxyPlot;
@@ -49,6 +50,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
     [Export(typeof(IDockableVM))]
     public partial class ManualFocuserDockableVM : DockableVM, IFocuserConsumer, ITelescopeConsumer, ICameraConsumer, IFilterWheelConsumer, IGuiderConsumer, IDisposable {
         private readonly ICameraMediator cameraMediator;
+        private readonly IApplicationStatusMediator applicationStatusMediator;
         private readonly IFocuserMediator focuserMediator;
         private readonly IFilterWheelMediator filterWheelMediator;
         private readonly ITelescopeMediator telescopeMediator;
@@ -113,6 +115,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             get => _moving;
             set {
                 _moving = value;
+                RaisePropertyChanged(nameof(CanConfigureLive));
                 RaisePropertyChanged(nameof(IsMoving));
                 CommandManager.InvalidateRequerySuggested();
             }
@@ -122,6 +125,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             get => _capturing;
             set {
                 _capturing = value;
+                RaisePropertyChanged(nameof(CanConfigureLive));
                 RaisePropertyChanged(nameof(IsCapturing));
                 CommandManager.InvalidateRequerySuggested();
             }
@@ -244,7 +248,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ICameraMediator cameraMediator, IImagingMediator imagingMediator, IFilterWheelMediator filterWheelMediator, IFocuserMediator focuserMediator, ITelescopeMediator telescopeMediator,
             IGuiderMediator guiderMediator,
             IPluggableBehaviorSelector<IStarDetection> starDetectionSelector,
-            IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector) : base(profileService) {
+            IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector,
+            IApplicationStatusMediator applicationStatusMediator) : base(profileService) {
 
             // This will reference the resource dictionary to import the SVG graphic and assign it as the icon for the header bar
             var dict = new ResourceDictionary();
@@ -253,6 +258,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ImageGeometry.Freeze();
 
             this.cameraMediator = cameraMediator;
+            this.applicationStatusMediator = applicationStatusMediator;
             this.focuserMediator = focuserMediator;
             this.telescopeMediator = telescopeMediator;
             this.filterWheelMediator = filterWheelMediator;
@@ -267,6 +273,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.DataModel = new ManualFocuserModel(profileService, imagingMediator, cameraMediator, starDetectionSelector, starAnnotatorSelector);
             InitializeFocusTargets(profileService);
             InitializeFocusAssist();
+            ObservePreparedImages(imagingMediator);
 
             // Commands are created before consumer registration so that no device
             // callback can fire a CanExecute against half-initialised state.
@@ -296,7 +303,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 if (focuser != null) {
                     UserStep = Convert.ToInt32(focuser.StepSize);
                 }
-            }));
+            }), _ => CanMove() && HasMeasuredBest);
 
             HaltFocuserCommand = new RelayCommand(_ => Guard("Halt", () => {
                 try { assistCts?.Cancel(); } catch { }
@@ -321,6 +328,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public void Dispose() {
             if (disposed) return;
             disposed = true;
+            StopObservingPreparedImages();
             try { assistCts?.Cancel(); } catch { }
             try { gotoCts?.Cancel(); } catch { }
 
@@ -410,6 +418,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ApplyOnUiThread(() => {
                 CameraInfo = deviceInfo;
                 RaisePropertyChanged(nameof(CameraInfo));
+                RaisePropertyChanged(nameof(RoiLocationText));
+                RaisePropertyChanged(nameof(PreviewRoiRectangle));
+                RaisePropertyChanged(nameof(CanUseFocusStreaming));
+                RaisePropertyChanged(nameof(FocusStreamAvailability));
                 RefreshGotoAvailability();
             });
         }
@@ -532,16 +544,24 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             return await ExecuteShootAsync();
         }
 
+        private ManualFocuserModel.FocusCaptureSettings linearFocusCapture;
         private async Task<int> ExecuteLinearAFAsync() {
-            if (!CanMove() || CameraInfo?.Connected != true || !TakeShootAfterMove || !cameraMediator.IsFreeToCapture(this)) {
-                Notification.ShowWarning("Manual Focuser: Linear AF requires an idle camera, a connected focuser, and capture after move enabled");
+            if (!CanMove() || CameraInfo?.Connected != true || !cameraMediator.IsFreeToCapture(this)) {
+                Notification.ShowWarning("Manual Focuser: Linear AF requires an idle camera and a connected focuser");
                 return 0;
             }
+            linearFocusCapture = DataModel.CreateFocusCaptureSettings(PreviewExposureMs / 1000,
+                PreviewRoiWidth, PreviewRoiHeight, PreviewCenterX, PreviewCenterY);
+            IsSelectingRoi = false;
+            cameraMediator.RegisterCaptureBlock(this);
             IsMoving = true;
             try {
                 return await ExecuteLinearAFInternalAsync();
             } finally {
+                linearFocusCapture = null;
+                try { cameraMediator.ReleaseCaptureBlock(this); } catch (Exception e) { Logger.Error("Linear AF camera reservation release failed", e); }
                 IsMoving = false;
+                applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = string.Empty });
             }
         }
 
@@ -575,7 +595,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
 
         private async Task<int> ExecuteShootAsync() {
-            if (!Properties.Settings.Default.TakeShootAfterMove) return 0;
+            if (linearFocusCapture == null && !Properties.Settings.Default.TakeShootAfterMove) return 0;
 
             var camera = CameraInfo;
             if (camera?.Connected != true) return 0;
@@ -593,13 +613,19 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             }
 
             ResetCaptureCts();
+            IsSelectingRoi = false;
             IsCapturing = true;
-            cameraMediator.RegisterCaptureBlock(this);
+            bool ownsCaptureBlock = linearFocusCapture == null;
+            if (ownsCaptureBlock) cameraMediator.RegisterCaptureBlock(this);
             try {
                 // N.I.N.A. calls progress.Report unconditionally in places, so a null
                 // progress is an NRE waiting to happen. Progress<T> would marshal every
                 // report onto the dispatcher, so use a sink that simply discards.
                 IProgress<ApplicationStatus> progress = NullProgress<ApplicationStatus>.Instance;
+                var focusCapture = linearFocusCapture ?? DataModel.CreateFocusCaptureSettings(PreviewExposureMs / 1000,
+                    PreviewRoiWidth, PreviewRoiHeight, PreviewCenterX, PreviewCenterY);
+                applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser",
+                    Status = $"Focus exposure {focusCapture.Seconds:F3} s | ROI {focusCapture.Roi.Width}×{focusCapture.Roi.Height} px" });
 
                 var autofocusFilter = await SetAutofocusFilter(null, captureCts.Token, progress);
 
@@ -608,7 +634,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     profileService.ActiveProfile.FocuserSettings.AutoFocusNumberOfFramesPerPoint,
                     focuser.Position,
                     captureCts.Token,
-                    progress);
+                    progress, focusCapture);
 
                 //If star Measurement is 0, we didn't detect any stars or shapes, and want this point to be ignored by the fitting as much as possible. Setting a very high Stdev will do the trick.
                 if (hfrMeasurement.Measure == 0) {
@@ -622,11 +648,20 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 return 1;
             } finally {
                 IsCapturing = false;
-                try { cameraMediator.ReleaseCaptureBlock(this); } catch { }
+                if (ownsCaptureBlock) {
+                    try { cameraMediator.ReleaseCaptureBlock(this); } catch { }
+                    applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = string.Empty });
+                }
             }
         }
 
+        public bool HasMeasuredBest => DataModel.HFRFocusPoints.Any(point =>
+            double.IsFinite(point.Y) && point.Y > 0 && point.Y == MinHFR &&
+            point.X == MinStep && point.X >= 0 && point.X <= int.MaxValue);
+
         private void RaiseMeasurementProperties() {
+            RaisePropertyChanged(nameof(HasMeasuredBest));
+            CommandManager.InvalidateRequerySuggested();
             RaisePropertyChanged(nameof(MaxStep));
             RaisePropertyChanged(nameof(MaxHFR));
             RaisePropertyChanged(nameof(MinStep));

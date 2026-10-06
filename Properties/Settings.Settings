@@ -76,5 +76,6 @@
     <Setting Name="Blackclipping" Type="System.Double" Scope="User"><Value Profile="(Default)">-2.8</Value></Setting>
     <Setting Name="FocusStopPosition" Type="System.Int32" Scope="User"><Value Profile="(Default)">5000</Value></Setting>
     <Setting Name="CalibrationLargeSteps" Type="System.Int32" Scope="User"><Value Profile="(Default)">20</Value></Setting>
+    <Setting Name="UseFocusStreaming" Type="System.Boolean" Scope="User"><Value Profile="(Default)">True</Value></Setting>
   </Settings>
 </SettingsFile>

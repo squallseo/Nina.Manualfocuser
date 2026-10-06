@@ -21,7 +21,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Cwseo.NINA.ManualFocuser.Models {
-    public class ManualFocuserModel {
+    public partial class ManualFocuserModel {
         public sealed record PreviewTiming(double CaptureAndDownloadMs, double HostDownloadMs, double ConversionMs, double CropMs, int SourceWidth, int SourceHeight);
         public PreviewTiming LastPreviewTiming { get; private set; }
         private readonly IProfileService profileService;
@@ -219,7 +219,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             int exposuresPerFocusPoint,
             int focuserPosition,
             CancellationToken token,
-            IProgress<ApplicationStatus> progress) {
+            IProgress<ApplicationStatus> progress, FocusCaptureSettings focusCapture = null) {
 
             int frames = Math.Max(1, exposuresPerFocusPoint);
             var measures = new List<(MeasureAndError hfr, MeasureAndError spike)>(frames);
@@ -238,13 +238,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             for (int i = 0; i < frames; i++) {
                 token.ThrowIfCancellationRequested();
 
-                var image = await TakeExposure(filter, token, progress);
+                var image = await TakeExposure(filter, token, progress, focusCapture);
                 if (image == null) {
                     Logger.Warning("[ManualFocuser] Exposure returned no image - skipping frame");
                     continue;
                 }
 
-                measures.Add(await EvaluateExposure(image, focuserPosition, spikeParams, spikeEnabled, token, progress));
+                measures.Add(await EvaluateExposure(image, focuserPosition, spikeParams, spikeEnabled, token, progress, focusCapture));
             }
 
             if (measures.Count == 0) {
@@ -293,7 +293,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         }
 
         public async Task<(double[] Pixels, int Width, int Height, bool HardwareRoi)> CaptureFocusPreviewAsync(
-            double seconds, int roiSize, double centerXPercent, double centerYPercent, CancellationToken token, bool overview = false) {
+            double seconds, int roiSize, double centerXPercent, double centerYPercent, CancellationToken token, bool overview = false, int? roiHeight = null) {
             var camera = cameraMediator.GetInfo();
             if (camera?.Connected != true) throw new InvalidOperationException("Camera is disconnected.");
             token.ThrowIfCancellationRequested();
@@ -301,14 +301,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 throw new ArgumentException("Invalid preview exposure or ROI.");
             if ((camera.ExposureMin > 0 && seconds < camera.ExposureMin) || (camera.ExposureMax > 0 && seconds > camera.ExposureMax))
                 throw new InvalidOperationException($"Preview exposure is outside the camera range ({camera.ExposureMin}–{camera.ExposureMax} seconds).");
-            int size = Math.Min(roiSize, Math.Min(camera.XSize, camera.YSize));
-            if (size < 32) throw new InvalidOperationException("Camera dimensions are unavailable.");
-            int x = Math.Clamp((int)(camera.XSize * centerXPercent / 100) - size / 2, 0, camera.XSize - size);
-            int y = Math.Clamp((int)(camera.YSize * centerYPercent / 100) - size / 2, 0, camera.YSize - size);
+            var roi = FocusRoi.Fit(camera.XSize, camera.YSize, roiSize, roiHeight ?? roiSize, centerXPercent, centerYPercent,
+                camera.DeviceId?.StartsWith("QHY600M-", StringComparison.OrdinalIgnoreCase) == true ? 4 : 2);
+            int x = roi.X, y = roi.Y, size = roi.Width, sizeY = roi.Height;
             var seq = new CaptureSequence(seconds, CaptureSequence.ImageTypes.SNAPSHOT, null, null, 1) {
                 Binning = new BinningMode(1, 1), EnableSubSample = camera.CanSubSample && !overview
             };
-            if (seq.EnableSubSample) seq.SubSambleRectangle = new ObservableRectangle(x, y, size, size);
+            if (seq.EnableSubSample) seq.SubSambleRectangle = new ObservableRectangle(x, y, size, sizeY);
             // One capture at a time; no speculative retry against a native driver.
             var timer = System.Diagnostics.Stopwatch.StartNew();
             var exposure = await imagingMediator.CaptureImage(seq, token, NullPreviewProgress.Instance);
@@ -339,11 +338,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 LastPreviewTiming = new(captureMs, hostDownloadMs, conversionMs, timer.Elapsed.TotalMilliseconds, width, height);
                 return (fullPreview, outWidth, outHeight, false);
             }
-            bool hardwareRoi = seq.EnableSubSample && width <= size && height <= size;
+            bool hardwareRoi = seq.EnableSubSample && width <= size && height <= sizeY;
             // Drivers/simulators can return a full frame despite a requested ROI.
             int left = hardwareRoi ? 0 : Math.Clamp(x, 0, Math.Max(0, width - size));
-            int top = hardwareRoi ? 0 : Math.Clamp(y, 0, Math.Max(0, height - size));
-            int cropWidth = Math.Min(size, width), cropHeight = Math.Min(size, height);
+            int top = hardwareRoi ? 0 : Math.Clamp(y, 0, Math.Max(0, height - sizeY));
+            int cropWidth = Math.Min(size, width), cropHeight = Math.Min(sizeY, height);
             var pixels = new double[cropWidth * cropHeight];
             for (int row = 0; row < cropHeight; row++) {
                 token.ThrowIfCancellationRequested();
@@ -358,7 +357,21 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             public void Report(ApplicationStatus value) { }
         }
 
-        private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress) {
+        private async Task<IExposureData> TakeExposure(FilterInfo filter, CancellationToken token, IProgress<ApplicationStatus> progress, FocusCaptureSettings focusCapture = null) {
+                if (focusCapture != null) {
+                    var camera = cameraMediator.GetInfo();
+                    if (camera?.Connected != true || camera.XSize != focusCapture.SensorWidth || camera.YSize != focusCapture.SensorHeight)
+                        throw new InvalidOperationException("Camera changed during focus capture.");
+                    var seq = new CaptureSequence(focusCapture.Seconds, CaptureSequence.ImageTypes.SNAPSHOT, filter, null, 1);
+                    seq.Binning = new BinningMode(1, 1);
+                    seq.Gain = camera.Gain; seq.Offset = camera.Offset;
+                    seq.EnableSubSample = camera.CanSubSample;
+                    var roi = focusCapture.Roi;
+                    seq.SubSambleRectangle = camera.CanSubSample ? new ObservableRectangle(roi.X, roi.Y, roi.Width, roi.Height) : null;
+                    token.ThrowIfCancellationRequested();
+                    return await imagingMediator.CaptureImage(seq, token, progress);
+                }
+
             IExposureData image;
             var retries = 0;
             do {
@@ -389,7 +402,6 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 if (filter?.AutoFocusGain > -1) {
                     seq.Gain = filter.AutoFocusGain;
                 }
-
                 try {
                     image = await imagingMediator.CaptureImage(seq, token, progress);
                 } catch (OperationCanceledException) {
@@ -468,7 +480,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             SpikeAnalysisParams spikeParam,
             bool spikeEnabled,
             CancellationToken token,
-            IProgress<ApplicationStatus> progress) {
+            IProgress<ApplicationStatus> progress, FocusCaptureSettings focusCapture = null) {
 
             Logger.Trace("Evaluating Exposure");
             MeasuredSpikeAngle = double.NaN;
@@ -476,6 +488,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             SpikeAngleIsAuto = spikeParam.autoSpikeAngle;
 
             var imageData = await exposureData.ToImageData(progress, token);
+            if (focusCapture != null) imageData = CropFocusImage(imageData, focusCapture);
 
             bool autoStretch = true;
             //If using contrast based statistics, no need to stretch
@@ -509,11 +522,11 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     NumberOfAFStars = profileService.ActiveProfile.FocuserSettings.AutoFocusUseBrightestStars
                 };
 
-                if (profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio < 1 && !IsSubSampleEnabled()) {
+                if (focusCapture == null && profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio < 1 && !IsSubSampleEnabled()) {
                     analysisParams.UseROI = true;
                     analysisParams.InnerCropRatio = profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio;
                 }
-                if (profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio < 1) {
+                if (focusCapture == null && profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio < 1) {
                     analysisParams.UseROI = true;
                     if (IsSubSampleEnabled() && profileService.ActiveProfile.FocuserSettings.AutoFocusOuterCropRatio < 1.0) {
                         // We have subsampled already. Since outer crop is set, the user wants a donut shape
@@ -552,9 +565,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
 
                 // Hand the untouched, detector-owned result back to N.I.N.A.
-                image.UpdateAnalysis(analysisParams, analysisResult);
+                if (focusCapture == null) image.UpdateAnalysis(analysisParams, analysisResult);
 
-                if (profileService.ActiveProfile.ImageSettings.AnnotateImage) {
+                if (focusCapture == null && profileService.ActiveProfile.ImageSettings.AnnotateImage) {
                     token.ThrowIfCancellationRequested();
                     var starAnnotator = starAnnotatorSelector.GetBehavior();
                     var annotatedImage = await starAnnotator.GetAnnotatedImage(analysisParams, analysisResult, image.Image, token: token);
@@ -570,7 +583,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     NoiseReduction = profileService.ActiveProfile.ImageSettings.NoiseReduction,
                     Method = profileService.ActiveProfile.FocuserSettings.ContrastDetectionMethod
                 };
-                if (profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio < 1 && !IsSubSampleEnabled()) {
+                if (focusCapture == null && profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio < 1 && !IsSubSampleEnabled()) {
                     analysisParams.UseROI = true;
                     analysisParams.InnerCropRatio = profileService.ActiveProfile.FocuserSettings.AutoFocusInnerCropRatio;
                 }

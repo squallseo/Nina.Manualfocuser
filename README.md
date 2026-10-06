@@ -543,11 +543,18 @@ hover background and foreground use NINA's `ButtonBackgroundSelectedBrush`
 and `ButtonForegroundBrush`, following the profile color schema; normal/pressed
 background uses `ButtonBackgroundBrush`.
 The mode selector defaults to **Manual focus**, showing target and step controls
-with **Use best** in the top row. Selecting **Auto focus** replaces those controls
-with the algorithm selector (currently only **Linear scan**), **Run autofocus**,
-and **Single pass**. Changing the selection does not start a run. **Clear chart**
+with **Use best** and **Expose** alongside the movement controls. Use best is enabled
+only after a valid best position has been measured. Selecting **Auto focus** replaces
+those controls with **Linear AF (HFR)**, **Bahtinov**, or **Spike**, using one
+**Run autofocus** button. **Single pass** applies to Linear AF. Changing the selection
+does not start a run. Exposure and mouse-editable ROI are shared by all modes.
+**Clear chart**
 and the running operation's **Stop focus** button are in the chart toolbar.
-The collapsed **Spike analysis** options are below the **Focus star** picker.
+The always-visible **Spike analysis** options are below the **Focus star** picker.
+Bahtinov and Spike use adaptive bounded motor steps and live preview when the host
+supports streaming; unsupported cameras use individual frames. Native QHY600M
+streaming is blocked only in 3x3 bin readout mode. Installed NINA 3.2 disables native
+ToupTek LiveView capability, so ToupTek currently uses individual frames.
 The chart fills the remaining dock height. Only the controls scroll when the
 dock is short; the plot stays in a finite, star-sized grid row. Layout previews
 at widths 420 and 650 verified that increasing window height by 160 pixels

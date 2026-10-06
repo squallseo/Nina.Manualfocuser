@@ -15,6 +15,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
 
         private void UpdateLayoutMode() {
+            foreach (UIElement child in Children)
+                if (child is FrameworkElement card) card.VerticalAlignment = VerticalAlignment.Top;
             bool wide = ActualWidth >= 560;
             if (wide == sideBySide || Children.Count < 2) return;
             sideBySide = wide;

@@ -10,14 +10,17 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Cwseo.NINA.ManualFocuser.Models;
 using NINA.Core.Utility;
+using NINA.Core.Model;
 using NINA.Core.Utility.Notification;
 
 namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class ManualFocuserDockableVM {
         private CancellationTokenSource assistCts;
         private bool assistRunning;
+        private bool isStoppingFocusPreview;
+        public bool IsStoppingFocusPreview => isStoppingFocusPreview;
         private double previewExposureMs = 250, previewX = 50, previewY = 50;
-        private bool analyzeMask, maskConfirmed;
+        private bool analyzeMask;
         private int pendingPreviewMove;
         private string focusMode = "Manual";
         public string FocusMode {
@@ -26,6 +29,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 if (focusMode == value || IsMoving) return;
                 focusMode = value;
                 assistCts?.Cancel();
+                IsSelectingRoi = false;
+                AutoFocusPreviewVisible = false;
                 RaisePropertyChanged();
             }
         }
@@ -35,24 +40,33 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public string LiveHfrText => double.IsFinite(LiveHfr) ? $"Local HFR: {LiveHfr:F2} px" : "Local HFR: no star detected";
         public string LiveTimingText { get; private set; } = "Timing will appear after the first live frame.";
         private ImageSource overviewImage;
-        public bool IsSelectingRoi { get; private set; }
+        private bool isSelectingRoi;
+        public bool IsSelectingRoi { get => isSelectingRoi; private set { isSelectingRoi = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText)); } }
         public ImageSource LiveDisplayImage => IsSelectingRoi ? overviewImage : FocusPreviewImage;
-        public string RoiLocationText => IsSelectingRoi ? "Full frame: click a star to center the 256 px ROI." : $"ROI center X {PreviewCenterX:F1}%, Y {PreviewCenterY:F1}% (50/50 = sensor center), 256 px";
+        public string RoiLocationText => $"{(IsSelectingRoi ? "Full frame: click a star or drag a rectangle. " : "")}ROI {PreviewRoiRectangle.Width}×{PreviewRoiRectangle.Height} px | X {PreviewCenterX:F1}%, Y {PreviewCenterY:F1}% | HFR: central 256 px";
         public ICommand SelectRoiCommand { get; private set; }
-        public void SelectPreviewRoi(double x, double y) {
-            if (!IsSelectingRoi) return;
-            PreviewCenterX = x * 100; PreviewCenterY = y * 100;
-            IsSelectingRoi = false; FocusPreviewImage = null;
-            RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText));
-            SetAssistStatus("ROI selected. Start live to see the star zoom.");
-        }
+        public ICommand RefreshRoiImageCommand { get; private set; }
         public ICommand ClearLiveGraphCommand { get; private set; }
         public bool IsFocusAssistRunning => assistRunning;
-        public double PreviewExposureMs { get => previewExposureMs; set { if (double.IsFinite(value)) previewExposureMs = Math.Clamp(value, 1, 5000); LiveHfrPoints.Clear(); RaisePropertyChanged(); } }
-        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); RaisePropertyChanged(nameof(RoiLocationText)); } }
-        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); LiveHfrPoints.Clear(); RaisePropertyChanged(); RaisePropertyChanged(nameof(RoiLocationText)); } }
+        public bool CanConfigureLive => !assistRunning && !IsCapturing && !IsMoving;
+        public bool CanUseFocusStreaming => CanConfigureLive && DataModel.SupportsFocusStreaming;
+        public string FocusStreamAvailability => DataModel.SupportsFocusStreaming ? "Continuous streaming (experimental)" : "Single-frame preview · streaming unavailable for this camera or 3×3 bin mode";
+        public bool UseFocusStreaming => Properties.Settings.Default.UseFocusStreaming;
+        public double PreviewExposureMs { get => previewExposureMs; set { if (double.IsFinite(value)) previewExposureMs = Math.Clamp(value, 1, 5000); ResetSharedFocusMeasurements(); RaisePropertyChanged(); } }
+        public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); ResetSharedFocusMeasurements(); RaisePropertyChanged(); UpdateRoiSelection(); } }
+        public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); ResetSharedFocusMeasurements(); RaisePropertyChanged(); UpdateRoiSelection(); } }
+        private void ResetSharedFocusMeasurements() {
+            LiveHfrPoints.Clear();
+            AutoFocusMetricPoints.Clear();
+            AutoFocusMetricText = "Autofocus preview";
+            RaisePropertyChanged(nameof(AutoFocusMetricText));
+            DataModel.ResetPlotData();
+            RaiseMeasurementProperties();
+            LiveHfr = double.NaN;
+            LiveStarProfile = Array.Empty<OxyPlot.DataPoint>();
+            RaisePropertyChanged(nameof(LiveHfrText)); RaisePropertyChanged(nameof(PreviewMetricText)); RaisePropertyChanged(nameof(LiveStarProfile));
+        }
         public bool AnalyzeBahtinov { get => analyzeMask; set { analyzeMask = value; RaisePropertyChanged(); } }
-        public bool BahtinovMaskConfirmed { get => maskConfirmed; set { maskConfirmed = value; RaisePropertyChanged(); CommandManager.InvalidateRequerySuggested(); } }
         public ImageSource FocusPreviewImage { get; private set; }
         public string FocusAssistStatus { get; private set; } = "Preview: center a star in the ROI. Exposure is not the delivered frame interval.";
         public ICommand StartFocusPreviewCommand { get; private set; }
@@ -61,46 +75,84 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ICommand PreviewMoveInCommand { get; private set; }
         public ICommand PreviewMoveOutCommand { get; private set; }
         private void InitializeFocusAssist() {
+            InitializeRoiSelection();
             StartFocusPreviewCommand = new AsyncCommand<int>(() => RunGuarded("Focus preview", RunFocusPreviewAsync), _ => CanStartAssist());
             SelectRoiCommand = new AsyncCommand<int>(() => RunGuarded("Select ROI", CaptureOverviewAsync), _ => CanStartAssist());
-            StopFocusPreviewCommand = new RelayCommand(_ => assistCts?.Cancel(), _ => assistRunning);
-            ClearLiveGraphCommand = new RelayCommand(_ => LiveHfrPoints.Clear());
-            BahtinovAFCommand = new AsyncCommand<int>(() => RunGuarded("Bahtinov AF", RunBahtinovAfAsync), _ => CanStartAssist() && FocuserInfo?.Connected == true && BahtinovMaskConfirmed);
+            RefreshRoiImageCommand = new AsyncCommand<int>(() => RunGuarded("Refresh ROI image", () => CaptureOverviewCoreAsync(true)), _ => CanStartAssist());
+            StopFocusPreviewCommand = new RelayCommand(_ => {
+                isStoppingFocusPreview = true;
+                RaisePropertyChanged(nameof(IsStoppingFocusPreview));
+                SetAssistStatus("Stopping; waiting for the camera...");
+                assistCts?.Cancel();
+            }, _ => assistRunning && !isStoppingFocusPreview);
+            ClearLiveGraphCommand = new RelayCommand(_ => { LiveHfrPoints.Clear(); AutoFocusMetricPoints.Clear(); });
+            BahtinovAFCommand = new AsyncCommand<int>(() => RunGuarded("Bahtinov AF", RunBahtinovAfAsync), _ => CanStartAssist() && FocuserInfo?.Connected == true);
+            SpikeAFCommand = new AsyncCommand<int>(() => RunGuarded("Spike AF", () => RunLiveAutofocusAsync(false)), _ => CanStartAssist() && FocuserInfo?.Connected == true);
             PreviewMoveInCommand = new RelayCommand(_ => pendingPreviewMove = -(int)Math.Clamp(Math.Abs((long)UserStep), 1, 10000),
                 _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
             PreviewMoveOutCommand = new RelayCommand(_ => pendingPreviewMove = (int)Math.Clamp(Math.Abs((long)UserStep), 1, 10000),
                 _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
         }
-        private bool CanStartAssist() => !disposed && !assistRunning && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && CameraInfo?.Connected == true && cameraMediator.IsFreeToCapture(this);
-        private async Task<int> CaptureOverviewAsync() {
+        private bool CanStartAssist() => !disposed && !assistRunning && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && CameraInfo?.Connected == true
+            && !CameraInfo.IsExposing && !CameraInfo.LiveViewEnabled && cameraMediator.IsFreeToCapture(this);
+        private Task<int> CaptureOverviewAsync() => CaptureOverviewCoreAsync(false);
+        private async Task<int> CaptureOverviewCoreAsync(bool forceNew) {
             if (!CanStartAssist()) return 0;
             try {
                 BeginAssist(false);
                 SetAssistStatus("Capturing full frame for ROI selection...");
-                var frame = await DataModel.CaptureFocusPreviewAsync(PreviewExposureMs / 1000, 256, 50, 50, assistCts.Token, overview: true);
+                var cached = forceNew ? null : GetPreparedOverview();
+                var frame = cached != null
+                    ? await Task.Run(() => ManualFocuserModel.CreateFocusOverview(cached, assistCts.Token), assistCts.Token)
+                    : await DataModel.CaptureFocusPreviewAsync(PreviewExposureMs / 1000, 256, 50, 50, assistCts.Token, overview: true);
                 assistCts.Token.ThrowIfCancellationRequested();
                 overviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, null);
+                overviewPixels = frame.Pixels; overviewWidth = frame.Width; overviewHeight = frame.Height;
+                overviewSensorWidth = cached?.Properties.Width ?? DataModel.LastPreviewTiming.SourceWidth;
+                overviewSensorHeight = cached?.Properties.Height ?? DataModel.LastPreviewTiming.SourceHeight;
                 IsSelectingRoi = true;
+                UpdateRoiSelection();
                 RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText));
-                SetAssistStatus("Click an isolated star in the full-frame preview, then Start live.");
+                SetAssistStatus("Click a star, or drag an area around it.");
+                Logger.Info($"[ManualFocuser/ROI] source={(cached != null ? "prepared image" : "new full capture")} sensor={overviewSensorWidth}x{overviewSensorHeight}");
                 return 1;
             } finally { EndAssist(false); }
         }
-        private void SetAssistStatus(string status) { FocusAssistStatus = status; RaisePropertyChanged(nameof(FocusAssistStatus)); }
+        private long lastLiveStatusTimestamp;
+        private void SetAssistStatus(string status) {
+            FocusAssistStatus = status;
+            RaisePropertyChanged(nameof(FocusAssistStatus));
+            if (!assistRunning) return;
+            long timestamp = Stopwatch.GetTimestamp();
+            bool liveFrame = status.StartsWith("Streaming |") || status.StartsWith("Single frames |");
+            if (liveFrame && Stopwatch.GetElapsedTime(lastLiveStatusTimestamp, timestamp).TotalMilliseconds < 500) return;
+            lastLiveStatusTimestamp = timestamp;
+            applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = status });
+        }
         private void BeginAssist(bool moving) {
+            isStoppingFocusPreview = false;
+            RaisePropertyChanged(nameof(IsStoppingFocusPreview));
             assistCts?.Dispose(); assistCts = new CancellationTokenSource();
             pendingPreviewMove = 0;
             assistRunning = true; IsCapturing = true; if (moving) IsMoving = true;
             RaisePropertyChanged(nameof(IsFocusAssistRunning));
+            RaisePropertyChanged(nameof(CanConfigureLive));
+            RaisePropertyChanged(nameof(CanUseFocusStreaming));
             cameraMediator.RegisterCaptureBlock(this);
         }
         private void EndAssist(bool moving) {
             try { cameraMediator.ReleaseCaptureBlock(this); } catch (Exception e) { Logger.Error("Preview camera reservation release failed", e); }
+            applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = string.Empty });
             assistRunning = false; IsCapturing = false; if (moving) IsMoving = false;
+            isStoppingFocusPreview = false;
+            RaisePropertyChanged(nameof(IsStoppingFocusPreview));
             RaisePropertyChanged(nameof(IsFocusAssistRunning));
+            RaisePropertyChanged(nameof(CanConfigureLive));
+            RaisePropertyChanged(nameof(CanUseFocusStreaming));
         }
         private async Task<int> RunFocusPreviewAsync() {
             if (!CanStartAssist()) return 0;
+            LatestFrameStream<ManualFocuserModel.StreamPreviewFrame> stream = null;
             try {
                 BeginAssist(false);
                 IsSelectingRoi = false;
@@ -108,39 +160,62 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
                 int frames = 0;
+                bool streaming = UseFocusStreaming && DataModel.SupportsFocusStreaming;
+                double requestedExposureMs = PreviewExposureMs, centerX = PreviewCenterX, centerY = PreviewCenterY;
+                int roiWidth = PreviewRoiWidth, roiHeight = PreviewRoiHeight;
+                SetAssistStatus(streaming ? "Starting camera stream..." : "Starting single-frame preview...");
+                Logger.Info($"[ManualFocuser/LiveStream] starting mode={(streaming ? "stream" : "single")} readMode={CameraInfo?.ReadoutMode} exposureMs={requestedExposureMs} roiCenter={centerX},{centerY}");
                 while (true) {
                     assistCts.Token.ThrowIfCancellationRequested();
                     if (pendingPreviewMove != 0) {
+                        if (stream != null) { await stream.DisposeAsync(); stream = null; }
                         int relative = pendingPreviewMove; pendingPreviewMove = 0;
                         IsMoving = true;
                         try { await focuserMediator.MoveFocuserRelative(relative, assistCts.Token); }
                         finally { IsMoving = false; }
                     }
-                    double requestedExposureMs = PreviewExposureMs;
-                    var frame = await DataModel.CaptureFocusPreviewAsync(requestedExposureMs / 1000, 256, PreviewCenterX, PreviewCenterY, assistCts.Token);
+                    (double[] Pixels, int Width, int Height, bool HardwareRoi) frame;
+                    ManualFocuserModel.PreviewTiming timing;
+                    if (streaming) {
+                        stream ??= DataModel.StartFocusStreaming(requestedExposureMs / 1000, roiWidth, centerX, centerY, assistCts.Token, roiHeight);
+                        var received = await stream.ReadAsync(assistCts.Token);
+                        frame = (received.Pixels, received.Width, received.Height, received.HardwareRoi);
+                        timing = received.Timing;
+                    } else {
+                        frame = await DataModel.CaptureFocusPreviewAsync(requestedExposureMs / 1000, roiWidth, centerX, centerY, assistCts.Token, roiHeight: roiHeight);
+                        timing = DataModel.LastPreviewTiming;
+                    }
                     var processingTimer = Stopwatch.StartNew();
                     bool mask = AnalyzeBahtinov;
                     var measurement = mask ? await Task.Run(() => BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height), assistCts.Token) : null;
-                    double hfr = await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(frame.Pixels, frame.Width, frame.Height), assistCts.Token);
+                    var analysisFrame = FocusRoi.CenterWindow(frame.Pixels, frame.Width, frame.Height);
+                    double hfr = await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(analysisFrame.Pixels, analysisFrame.Width, analysisFrame.Height), assistCts.Token);
                     assistCts.Token.ThrowIfCancellationRequested();
                     double analysisMs = processingTimer.Elapsed.TotalMilliseconds;
                     processingTimer.Restart();
-                    FocusPreviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, measurement);
+                    FocusPreviewImage = await Task.Run(() => RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, measurement), assistCts.Token);
+                    assistCts.Token.ThrowIfCancellationRequested();
                     RaisePropertyChanged(nameof(FocusPreviewImage));
                     RaisePropertyChanged(nameof(LiveDisplayImage));
                     long now = clock.ElapsedMilliseconds;
                     LiveHfr = hfr;
-                    LiveHfrPoints.Add(new OxyPlot.DataPoint(now / 1000.0, hfr));
+                    // A single gap separates valid runs; missing frames are not measurements.
+                    if (double.IsFinite(hfr))
+                        LiveHfrPoints.Add(new OxyPlot.DataPoint(now / 1000.0, hfr));
+                    else if (LiveHfrPoints.Count > 0 && double.IsFinite(LiveHfrPoints[^1].Y))
+                        LiveHfrPoints.Add(new OxyPlot.DataPoint(now / 1000.0, double.NaN));
                     while (LiveHfrPoints.Count > 600 || (LiveHfrPoints.Count > 1 && LiveHfrPoints[0].X < now / 1000.0 - 120)) LiveHfrPoints.RemoveAt(0);
-                    int peak = Array.IndexOf(frame.Pixels, frame.Pixels.Max());
-                    int px = peak % frame.Width, py = peak / frame.Width;
-                    var profileSorted = (double[])frame.Pixels.Clone(); Array.Sort(profileSorted);
+                    int peak = Array.IndexOf(analysisFrame.Pixels, analysisFrame.Pixels.Max());
+                    int px = peak % analysisFrame.Width, py = peak / analysisFrame.Width;
+                    var profileSorted = (double[])analysisFrame.Pixels.Clone(); Array.Sort(profileSorted);
                     double background = profileSorted[profileSorted.Length / 2];
-                    double amplitude = Math.Max(1, frame.Pixels[peak] - background);
-                    LiveStarProfile = Enumerable.Range(Math.Max(0, px - 64), Math.Min(frame.Width - 1, px + 64) - Math.Max(0, px - 64) + 1)
-                        .Select(x => new OxyPlot.DataPoint(x - px, Math.Max(0, frame.Pixels[py * frame.Width + x] - background) / amplitude)).ToArray();
+                    double amplitude = Math.Max(1, analysisFrame.Pixels[peak] - background);
+                    LiveStarProfile = double.IsFinite(hfr)
+                        ? Enumerable.Range(Math.Max(0, px - 64), Math.Min(analysisFrame.Width - 1, px + 64) - Math.Max(0, px - 64) + 1)
+                            .Select(x => new OxyPlot.DataPoint(x - px, Math.Max(0, analysisFrame.Pixels[py * analysisFrame.Width + x] - background) / amplitude)).ToArray()
+                        : Array.Empty<OxyPlot.DataPoint>();
                     RaisePropertyChanged(nameof(LiveHfr));
-                    RaisePropertyChanged(nameof(LiveHfrText));
+                    RaisePropertyChanged(nameof(LiveHfrText)); RaisePropertyChanged(nameof(PreviewMetricText));
                     RaisePropertyChanged(nameof(LiveStarProfile));
                     string metric = mask ? measurement.IsValid ? $"Mask error {measurement.SignedErrorPixels:+0.00;-0.00;0.00} px" : $"HFR fallback: {measurement.FailureReason}" : double.IsFinite(hfr) ? $"Local HFR {hfr:F2} px" : "No isolated star detected";
                     if (mask && !measurement.IsValid) {
@@ -148,75 +223,29 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     }
                     double previewMs = processingTimer.Elapsed.TotalMilliseconds;
                     now = clock.ElapsedMilliseconds;
-                    var timing = DataModel.LastPreviewTiming;
-                    LiveTimingText = $"Capture+download {timing.CaptureAndDownloadMs:F0} ms (host download {timing.HostDownloadMs:F0}) | Convert {timing.ConversionMs:F0} | Crop {timing.CropMs:F0} | Analyze {analysisMs:F0} | Preview/graph {previewMs:F0} ms";
+                    LiveTimingText = streaming
+                        ? $"Stream receive {timing.CaptureAndDownloadMs:F0} ms | Convert {timing.ConversionMs:F0} | Crop {timing.CropMs:F0} | Analyze {analysisMs:F0} | Preview/graph {previewMs:F0} ms"
+                        : $"Capture+download {timing.CaptureAndDownloadMs:F0} ms (host download {timing.HostDownloadMs:F0}) | Convert {timing.ConversionMs:F0} | Crop {timing.CropMs:F0} | Analyze {analysisMs:F0} | Preview/graph {previewMs:F0} ms";
                     RaisePropertyChanged(nameof(LiveTimingText));
                     if (++frames == 1 || frames % 20 == 0)
-                        Logger.Info($"[ManualFocuser/LiveTiming] frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
-                    SetAssistStatus($"{metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
+                        Logger.Info($"[ManualFocuser/LiveTiming] mode={(streaming ? "stream" : "single")} frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
+                    SetAssistStatus($"{(streaming ? "Streaming" : "Single frames")} | {metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
                     previous = now;
                 }
             } catch (OperationCanceledException) { SetAssistStatus("Preview stopped."); return 0; }
             catch { SetAssistStatus("Preview failed; camera reservation released."); throw; }
-            finally { EndAssist(false); }
+            finally {
+                try { if (stream != null) await stream.DisposeAsync(); }
+                catch { SetAssistStatus("Camera stream stop failed. Reconnect the camera before retrying."); throw; }
+                finally { EndAssist(false); }
+            }
         }
-        private async Task<int> RunBahtinovAfAsync() {
-            if (!CanStartAssist() || FocuserInfo?.Connected != true || !BahtinovMaskConfirmed) return 0;
-            int origin = FocuserInfo.Position;
-            long configuredStep = Math.Abs((long)DataModel.AFStepSize);
-            if (configuredStep < 1 || configuredStep > 10000) throw new InvalidOperationException("Autofocus step size must be between 1 and 10000.");
-            int step = (int)configuredStep;
-            int offsets = Math.Clamp(DataModel.NumInitialSteps, 1, 12);
-            if (step < 1 || step > 10000 || origin < (long)step * offsets || origin + (long)step * offsets > int.MaxValue)
-                throw new InvalidOperationException("Invalid Bahtinov scan range. Check autofocus step size and current position.");
-            int lower = origin - step * offsets, upper = origin + step * offsets;
-            // Freeze optical ROI/exposure during a scan; changing settings cannot alter calibration halfway through.
-            double seconds = PreviewExposureMs / 1000, centerX = PreviewCenterX, centerY = PreviewCenterY;
-            var samples = new List<(int Position, double Error)>();
-            try {
-                BeginAssist(true);
-                var token = assistCts.Token;
-                BahtinovLine[] referenceLines = null;
-                async Task<double> Measure(int position) {
-                    // Discard one exposure after each move, following SharpCap's documented settling recommendation.
-                    await DataModel.CaptureFocusPreviewAsync(seconds, 256, centerX, centerY, token);
-                    var errors = new double[3];
-                    for (int i = 0; i < errors.Length; i++) {
-                        var frame = await DataModel.CaptureFocusPreviewAsync(seconds, 256, centerX, centerY, token);
-                        var result = await Task.Run(() => BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height), token);
-                        token.ThrowIfCancellationRequested();
-                        FocusPreviewImage = RenderFocusPreview(frame.Pixels, frame.Width, frame.Height, result);
-                        RaisePropertyChanged(nameof(FocusPreviewImage));
-                        if (!result.IsValid) throw new InvalidOperationException($"Mask detection lost at {position}: {result.FailureReason}. No further moves.");
-                        referenceLines ??= result.Lines;
-                        double alignment = result.Lines[1].Nx * referenceLines[1].Nx + result.Lines[1].Ny * referenceLines[1].Ny;
-                        double minimumAlignment = Math.Cos(3 * Math.PI / 180);
-                        if (Math.Abs(alignment) < minimumAlignment || referenceLines.Any(a => !result.Lines.Any(b => Math.Abs(a.Nx * b.Nx + a.Ny * b.Ny) >= minimumAlignment)))
-                            throw new InvalidOperationException("Detected mask orientation changed during the scan.");
-                        errors[i] = result.SignedErrorPixels * (alignment < 0 ? -1 : 1);
-                    }
-                    Array.Sort(errors);
-                    if (errors[2] - errors[0] > 1.0) throw new InvalidOperationException("Mask error is unstable. Increase exposure or improve star centering.");
-                    SetAssistStatus($"Bahtinov scan | {position} | error {errors[1]:+0.00;-0.00;0.00} px");
-                    return errors[1];
-                }
-                var completed = await BahtinovFocusRunner.RunAsync(origin, step, offsets,
-                    async (position, cancellation) => {
-                        if (focuserMediator.GetInfo()?.Connected != true) throw new InvalidOperationException("Focuser disconnected.");
-                        return await focuserMediator.MoveFocuser(position, cancellation);
-                    }, (position, cancellation) => Measure(position), token);
-                int target = completed.Position;
-                double final = completed.Error;
-                TargetPosition = target;
-                SetAssistStatus($"Bahtinov AF verified | {target} | error {final:+0.00;-0.00;0.00} px. Remove mask and check HFR.");
-                Notification.ShowSuccess("Bahtinov autofocus complete. Remove the mask before imaging.");
-                return 1;
-            } catch (OperationCanceledException) { SetAssistStatus("Bahtinov AF cancelled; focuser remains at current position."); return 0; }
-            catch (Exception e) { SetAssistStatus($"Bahtinov AF stopped: {e.Message}"); throw; }
-            finally { EndAssist(true); }
-        }
+        private Task<int> RunBahtinovAfAsync() => RunLiveAutofocusAsync(true);
         private static ImageSource RenderFocusPreview(double[] pixels, int width, int height, BahtinovMeasurement measurement) {
-            var sorted = (double[])pixels.Clone(); Array.Sort(sorted);
+            // Estimate the display stretch without cloning/sorting an entire large sensor frame.
+            var sorted = new double[Math.Min(pixels.Length, 65536)];
+            for (int i = 0; i < sorted.Length; i++) sorted[i] = pixels[(int)((long)i * pixels.Length / sorted.Length)];
+            Array.Sort(sorted);
             double black = sorted[sorted.Length / 2], white = sorted[(int)(sorted.Length * .998)];
             double scale = Math.Max(1, white - black);
             var bytes = new byte[pixels.Length];

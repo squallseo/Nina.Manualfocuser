@@ -96,6 +96,62 @@ Check(captures == before + 3, "Native capture failure never retries blindly");
 throwCapture = false;
 pixels = new ushort[3];
 await Reject<InvalidOperationException>(async () => await Capture(), "Inconsistent image dimensions reject instead of reading out of bounds");
+pixels = Enumerable.Range(0, 128 * 96).Select(i => (ushort)i).ToArray();
+camera.CanSubSample = true;
+var rectangle = await model.CaptureFocusPreviewAsync(.2, 64, 75, 25, default, roiHeight: 32);
+Check(captured.SubSambleRectangle.Width == 64 && captured.SubSambleRectangle.Height == 32,
+    "Single-frame capture preserves rectangular ROI dimensions");
+Check(rectangle.Width == 64 && rectangle.Height == 32 && rectangle.Pixels[0] == 8 * 128 + 64
+    && rectangle.Pixels[^1] == 39 * 128 + 127, "Single-frame rectangular crop uses correct bounds");
+frameWidth = 1050; frameHeight = 640; pixels = new ushort[frameWidth * frameHeight]; pixels[^1] = 60000;
+var reusedOverview = ManualFocuserModel.CreateFocusOverview(image, default);
+Check(reusedOverview.Width == 525 && reusedOverview.Height == 320 && reusedOverview.Pixels[^1] == 60000,
+    "Reused full-frame overview preserves an edge star during downsampling");
+Check(captures == before + 5, "Building an overview from an existing image does not capture again");
+await Reject<OperationCanceledException>(() => { ManualFocuserModel.CreateFocusOverview(image, cancellation.Token); return Task.CompletedTask; },
+    "Reused image processing respects cancellation");
+// The same capture settings feed Manual exposure and the Linear AF scan.
+camera.Gain = 120; camera.Offset = 25; camera.CanSubSample = true;
+var shared = model.CreateFocusCaptureSettings(.35, 64, 32, 75, 25);
+var take = typeof(ManualFocuserModel).GetMethod("TakeExposure", BindingFlags.NonPublic | BindingFlags.Instance);
+Task<IExposureData> SharedCapture(CancellationToken token = default) => (Task<IExposureData>)take.Invoke(model,
+    new object[] { null, token, new Progress<NINA.Core.Model.ApplicationStatus>(_ => { }), shared });
+before = captures;
+await SharedCapture();
+Check(captures == before + 1 && captured.ExposureTime == .35 && captured.Binning.X == 1 && captured.Binning.Y == 1,
+    "Manual and Linear AF capture use the shared exposure and 1x1 binning");
+Check(captured.EnableSubSample && captured.SubSambleRectangle.X == 64 && captured.SubSambleRectangle.Y == 8
+    && captured.SubSambleRectangle.Width == 64 && captured.SubSambleRectangle.Height == 32,
+    "Shared rectangular ROI is passed to a capable camera");
+Check(captured.Gain == 120 && captured.Offset == 25 && captured.FilterType == null,
+    "Shared capture retains camera gain/offset without inventing a filter");
+camera.CanSubSample = false; await SharedCapture();
+Check(!captured.EnableSubSample && captured.SubSambleRectangle == null, "Unsupported camera captures a full frame for software cropping");
+var full = Enumerable.Range(0, 128 * 96).Select(i => (ushort)i).ToArray();
+var cut = ManualFocuserModel.CropFocusPixels(full,128,96,shared);
+Check(cut.Length == 64*32 && cut[0] == 8*128+64 && cut[^1] == 39*128+127,
+    "Shared measurement crops full-frame pixels with the correct rectangular stride");
+Check(ReferenceEquals(cut,ManualFocuserModel.CropFocusPixels(cut,64,32,shared)), "Hardware ROI is not cropped twice");
+await Reject<InvalidOperationException>(() => { ManualFocuserModel.CropFocusPixels(new ushort[4096],64,64,shared); return Task.CompletedTask; },
+    "Unexpected driver dimensions fail instead of silently measuring another area");
+before = captures;
+await Reject<OperationCanceledException>(async () => await SharedCapture(cancellation.Token), "Canceled shared capture never reaches the driver");
+Check(captures == before,"Cancellation performs no exposure");
+throwCapture = true;
+await Reject<InvalidOperationException>(async () => await SharedCapture(),"Shared native capture failure propagates");
+Check(captures == before+1,"Shared native failure is not retried");
+throwCapture = false;
+camera.Connected = false;
+await Reject<InvalidOperationException>(async () => await SharedCapture(),"Camera disconnect rejects a frozen scan capture");
+Check(captures == before+1,"Disconnected shared capture never calls the driver");
+camera.Connected = true;
+await Reject<ArgumentException>(() => { model.CreateFocusCaptureSettings(.001,64,32,50,50); return Task.CompletedTask; },
+    "Shared exposure range is validated before the scan starts");
+camera.XSize = 9600; camera.YSize = 6422; camera.DeviceId = "QHY600M-test";
+var largeShared = model.CreateFocusCaptureSettings(.35,4096,3072,99,99);
+Check(largeShared.Roi.Width == 4096 && largeShared.Roi.Height == 3072 && largeShared.Roi.X % 4 == 0
+    && largeShared.Roi.X+largeShared.Roi.Width <= 9600 && largeShared.Roi.Y+largeShared.Roi.Height <= 6422,
+    "Shared capture allows large ROIs and preserves native camera alignment at sensor edges");
 Console.WriteLine($"{passed} integration checks passed; no hardware accessed.");
 
 public class Fake : DispatchProxy {

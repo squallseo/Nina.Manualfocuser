@@ -13,5 +13,6 @@
     <None Include="$(NinaInstallDir)\External\x64\NOVAS\*" Link="External\x64\NOVAS\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NinaInstallDir)\External\JPLEPH" Link="External\JPLEPH" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NinaInstallDir)\SQLite.Interop.dll" Link="SQLite.Interop.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NinaInstallDir)\vcruntime140.dll" Link="vcruntime140.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

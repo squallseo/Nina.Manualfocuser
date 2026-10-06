@@ -354,5 +354,12 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
                 this["UseOnePass"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool UseFocusStreaming {
+            get { return (bool)this["UseFocusStreaming"]; }
+            set { this["UseFocusStreaming"] = value; }
+        }
     }
 }

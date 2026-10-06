@@ -81,6 +81,15 @@ namespace Cwseo.NINA.ManualFocuser {
         private static double Clamp(double v, double lo, double hi)
             => double.IsNaN(v) ? lo : Math.Clamp(v, lo, hi);
 
+        public bool UseFocusStreaming {
+            get => Settings.Default.UseFocusStreaming;
+            set {
+                Settings.Default.UseFocusStreaming = value;
+                Settings.Default.Save();
+                RaisePropertyChanged();
+            }
+        }
+
         public bool EnableSpikeMetric {
             get => Properties.Settings.Default.EnableSpikeMetric;
             set {
