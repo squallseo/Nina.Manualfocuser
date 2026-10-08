@@ -55,7 +55,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 var token=assistCts.Token;
                 EnsureCamera();
                 var frame=await DataModel.CaptureFocusPreviewAsync(settings.Seconds,settings.Roi.Width,requestedCenterX,requestedCenterY,token,roiHeight:settings.Roi.Height);
-                var diagnostics=new FocusDiagnosticSession("AutoROI");
+                var diagnostics=CreateDiagnosticSession("AutoROI");
                 await diagnostics.SaveAsync(frame.Pixels,frame.Width,frame.Height,new {
                     TimestampUtc=DateTime.UtcNow,Phase="auto-roi",CameraId=cameraId,ExposureSeconds=settings.Seconds,
                     SensorRoi=settings.Roi,Mask=mask,DisplayStretched=false

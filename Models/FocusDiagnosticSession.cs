@@ -9,13 +9,19 @@ namespace Cwseo.NINA.ManualFocuser.Models {
     /// <summary>Private raw measurement archive; never publishes to NINA image history.</summary>
     public sealed class FocusDiagnosticSession {
         public string DirectoryPath { get; }
+        private readonly bool enabled;
+        private readonly Func<bool> stillEnabled;
+        public bool IsEnabled => enabled && (stillEnabled?.Invoke() ?? true);
         private int sequence;
-        public FocusDiagnosticSession(string mode, string root = null) {
+        public FocusDiagnosticSession(string mode, string root = null, bool enabled = false, Func<bool> stillEnabled = null) {
+            this.enabled = enabled; this.stillEnabled = stillEnabled;
+            if (!IsEnabled) return;
             root ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NINA", "ManualFocuser", "FocusDiagnostics");
             DirectoryPath = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff'Z'") + "-" + mode + "-" + Guid.NewGuid().ToString("N").Substring(0,8));
             Directory.CreateDirectory(DirectoryPath);
         }
         public async Task<string> SaveAsync(double[] pixels, int width, int height, object metadata) {
+            if (!IsEnabled) return null;
             if (pixels == null || (long)width * height != pixels.Length || width < 1 || height < 1)
                 throw new ArgumentException("Invalid diagnostic frame.");
             string name = (++sequence).ToString("D6");
@@ -41,7 +47,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             });
             return name;
         }
-        public Task EventAsync(object value) => File.AppendAllTextAsync(Path.Combine(DirectoryPath,"measurements.jsonl"),
+        public Task EventAsync(object value) => !IsEnabled ? Task.CompletedTask : File.AppendAllTextAsync(Path.Combine(DirectoryPath,"measurements.jsonl"),
             JsonSerializer.Serialize(value,new JsonSerializerOptions{NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals})+Environment.NewLine);
     }
 }

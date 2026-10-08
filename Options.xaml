@@ -25,6 +25,11 @@
                 <TextBlock Text="Live focus" FontWeight="Bold" Margin="5,0,0,6"/>
                 <CheckBox Content="Use continuous camera streaming" IsChecked="{Binding UseFocusStreaming}" Margin="5,0,0,12"
                           ToolTip="Applies on the next Start live. Unsupported cameras and QHY600M 3×3 bin mode use individual exposures."/>
+                <TextBlock Text="Diagnostics" FontWeight="Bold" Margin="5,0,0,6"/>
+                <CheckBox Content="Enable diagnostic recording" IsChecked="{Binding EnableFocusDiagnostics}" Margin="5,0,0,6"
+                          ToolTip="Off by default. Records detailed logs, raw FITS/JSON and manual spike CSV for troubleshooting. Start a new focus operation after enabling; turning off stops further records. Errors and warnings are always logged."/>
+                <TextBlock Margin="5,0,0,12" MaxWidth="302" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource SecondaryBrush}"
+                           Text="Enable when troubleshooting. Raw images are saved under NINA\ManualFocuser\FocusDiagnostics in Local AppData; detailed logs and spike CSV are in NINA\Logs."/>
 
                 <!-- Header -->
                 <StackPanel Orientation="Horizontal">
@@ -85,13 +90,6 @@
                                ToolTip="Turn off to skip spike analysis entirely. HFR keeps working." />
                     <CheckBox Grid.Row="0" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
                               IsChecked="{Binding EnableSpikeMetric}" />
-
-                    <!-- Diagnostics -->
-                    <TextBlock Grid.Row="1" Margin="0,2,6,2" VerticalAlignment="Center" FontSize="11"
-                               Text="Write diagnostics CSV"
-                               ToolTip="Writes position, J, varC, varG, kurtosis, measured angle and the&#x0A;parameter set to %LOCALAPPDATA%\NINA\Logs\ManualFocuser-spike-*.csv" />
-                    <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" HorizontalAlignment="Left"
-                              IsChecked="{Binding WriteSpikeDiagnostics}" />
 
                     <!-- Spike angle and Auto live on the Imaging tab panel, next to the
                          measured value they need to be checked against. -->

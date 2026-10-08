@@ -15,6 +15,9 @@ using NINA.Core.Utility.Notification;
 
 namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class ManualFocuserDockableVM {
+        private static FocusDiagnosticSession CreateDiagnosticSession(string mode) => new(mode,
+            enabled: Properties.Settings.Default.EnableFocusDiagnostics,
+            stillEnabled: () => Properties.Settings.Default.EnableFocusDiagnostics);
         private CancellationTokenSource assistCts;
         private bool assistRunning;
         private bool assistCaptureReserved;
@@ -136,7 +139,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 UpdateRoiSelection();
                 RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText));
                 SetAssistStatus("Click a star, or drag an area around it.");
-                Logger.Info($"[ManualFocuser/ROI] source={(cached != null ? "prepared image" : "new full capture")} sensor={overviewSensorWidth}x{overviewSensorHeight}");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/ROI] source={(cached != null ? "prepared image" : "new full capture")} sensor={overviewSensorWidth}x{overviewSensorHeight}");
                 return 1;
             } finally { EndAssist(false); }
         }
@@ -194,16 +197,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 RaisePropertyChanged(nameof(RoiLocationText));
                 LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
-                var diagnostics = new FocusDiagnosticSession("LiveFocus");
+                var diagnostics = CreateDiagnosticSession("LiveFocus");
                 long lastSaved = -5000;
-                Logger.Info("[ManualFocuser/Diagnostics] " + diagnostics.DirectoryPath);
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info("[ManualFocuser/Diagnostics] " + diagnostics.DirectoryPath);
                 int frames = 0;
                 long lastSpikeAnalysis = -1000;
                 bool streaming = UseFocusStreaming && DataModel.SupportsFocusStreaming;
                 double requestedExposureMs = PreviewExposureMs, centerX = PreviewCenterX, centerY = PreviewCenterY;
                 int roiWidth = PreviewRoiWidth, roiHeight = PreviewRoiHeight;
                 SetAssistStatus(streaming ? "Starting camera stream..." : "Starting single-frame preview...");
-                Logger.Info($"[ManualFocuser/LiveStream] starting mode={(streaming ? "stream" : "single")} readMode={CameraInfo?.ReadoutMode} exposureMs={requestedExposureMs} roiCenter={centerX},{centerY}");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/LiveStream] starting mode={(streaming ? "stream" : "single")} readMode={CameraInfo?.ReadoutMode} exposureMs={requestedExposureMs} roiCenter={centerX},{centerY}");
                 while (true) {
                     assistCts.Token.ThrowIfCancellationRequested();
                     if(previewMove?.IsCompleted==true) await FinishMove();
@@ -213,7 +216,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         if(focuserMediator.GetInfo()?.Connected!=true) throw new InvalidOperationException("Focuser disconnected.");
                         int relative = pendingPreviewMove; pendingPreviewMove = 0;
                         IsMoving = true;
-                        Logger.Info($"[ManualFocuser/LiveMove] relative={relative} keepStream={streaming}");
+                        if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/LiveMove] relative={relative} keepStream={streaming}");
                         // The existing reader remains the sole owner of the camera SDK.
                         // The separate focuser task changes no camera/exposure/ROI settings.
                         previewMove=focuserMediator.MoveFocuserRelative(relative,assistCts.Token);
@@ -241,7 +244,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         PublishPreviewSpikeAngle(spikes);
                         lastSpikeAnalysis = clock.ElapsedMilliseconds;
                     }
-                    if (clock.ElapsedMilliseconds-lastSaved>=5000) {
+                    if (diagnostics.IsEnabled && clock.ElapsedMilliseconds-lastSaved>=5000) {
                         await diagnostics.SaveAsync(frame.Pixels,frame.Width,frame.Height,new {
                             TimestampUtc=DateTime.UtcNow,CameraId=CameraInfo?.DeviceId,ExposureMs=requestedExposureMs,
                             Gain=CameraInfo?.Gain,Offset=CameraInfo?.Offset,ReadoutMode=CameraInfo?.ReadoutMode,
@@ -288,7 +291,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         : $"Capture+download {timing.CaptureAndDownloadMs:F0} ms (host download {timing.HostDownloadMs:F0}) | Convert {timing.ConversionMs:F0} | Crop {timing.CropMs:F0} | Analyze {analysisMs:F0} | Preview/graph {previewMs:F0} ms";
                     RaisePropertyChanged(nameof(LiveTimingText));
                     if (++frames == 1 || frames % 20 == 0)
-                        Logger.Info($"[ManualFocuser/LiveTiming] mode={(streaming ? "stream" : "single")} frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
+                        if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/LiveTiming] mode={(streaming ? "stream" : "single")} frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
                     SetAssistStatus($"{(streaming ? "Streaming" : "Single frames")} | {(IsMoving?"Focuser moving | ":"")}{metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
                     previous = now;
                 }

@@ -81,6 +81,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         }
 
         public static void LogFrame(string context, int focuserPosition, SpikeFrameResult r) {
+            if (!Properties.Settings.Default.EnableFocusDiagnostics) return;
             if (r.Status != SpikeStatus.Ok) {
                 Logger.Debug($"[ManualFocuser/Spike] {context} pos={focuserPosition} status={r.Status} usedStars={r.UsedStars}");
                 return;

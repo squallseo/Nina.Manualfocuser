@@ -43,7 +43,7 @@ using(var canceledScout=new CancellationTokenSource()) {
     try { BahtinovAutoRoi.Find(scoutPixels,512,512,canceledScout.Token); } catch(OperationCanceledException) { cancelled=true; }
     Check(cancelled,"Automatic ROI search respects Stop before accepting a crop");
 }
-var diagnostic=new FocusDiagnosticSession("Checks",Path.Combine(AppContext.BaseDirectory,"diagnostics"));
+var diagnostic=new FocusDiagnosticSession("Checks",Path.Combine(AppContext.BaseDirectory,"diagnostics"),enabled:true);
 double[] diagnosticPixels=Enumerable.Range(0,1024).Select(i=>(double)(i*64)).ToArray();diagnosticPixels[0]=0;diagnosticPixels[^1]=65535;
 string diagnosticId=await diagnostic.SaveAsync(diagnosticPixels,32,32,new{ExposureSeconds=.05,FocuserPosition=1000,Raw=true});
 var savedFits=Cwseo.NINA.ManualFocuser.Tools.SpikeBatch.FitsImage.Load(Path.Combine(diagnostic.DirectoryPath,diagnosticId+".fits"));

@@ -209,7 +209,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 double error = await centering.CenterAsync(solver, NullProgress<PlateSolveProgress>.Instance, progress, runCts.Token);
                 CheckDevices();
                 PreviewCenterX = 50; PreviewCenterY = 50;
-                Logger.Info($"[ManualFocuser/Center] {target.Name} centered; error {error:F1} arcsec, tolerance {centering.Parameter.Threshold * 60:F1} arcsec.");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/Center] {target.Name} centered; error {error:F1} arcsec, tolerance {centering.Parameter.Threshold * 60:F1} arcsec.");
                 ReportStatus($"{target.Name} centered · error {error:F1}″ (tolerance {centering.Parameter.Threshold * 60:F1}″). Focus ROI moved to image center.");
                 return 1;
             } catch (OperationCanceledException) {

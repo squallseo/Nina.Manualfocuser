@@ -167,7 +167,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         /// </summary>
         public void AddSpikePoint(int position, MeasureAndError measurement) {
             if (double.IsNaN(measurement.Measure) || double.IsInfinity(measurement.Measure)) {
-                Logger.Debug($"[ManualFocuser] Skipping invalid spike point at position {position}");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Debug($"[ManualFocuser] Skipping invalid spike point at position {position}");
                 return;
             }
 
@@ -383,7 +383,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             var retries = 0;
             do {
                 token.ThrowIfCancellationRequested();
-                Logger.Trace("Starting Exposure for manual focus");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Trace("Starting Exposure for manual focus");
                 double expTime = profileService.ActiveProfile.FocuserSettings.AutoFocusExposureTime;
                 if (filter != null && filter.AutoFocusExposureTime > -1) {
                     expTime = filter.AutoFocusExposureTime;
@@ -489,7 +489,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             CancellationToken token,
             IProgress<ApplicationStatus> progress, FocusCaptureSettings focusCapture = null) {
 
-            Logger.Trace("Evaluating Exposure");
+            if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Trace("Evaluating Exposure");
             MeasuredSpikeAngle = double.NaN;
             MeasuredSpikeAngleStrength = 0;
             SpikeAngleIsAuto = spikeParam.autoSpikeAngle;
@@ -613,7 +613,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         private string diagPath;
 
         private void WriteDiagnosticsRow(int focuserPosition, double hfr, double hfrStdev, SpikeFrameResult r, SpikeAnalysisParams p) {
-            if (!Properties.Settings.Default.WriteSpikeDiagnostics) return;
+            if (!Properties.Settings.Default.EnableFocusDiagnostics) return;
 
             try {
                 lock (diagLock) {
@@ -669,7 +669,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     File.AppendAllText(diagPath, sb.ToString(), Encoding.UTF8);
                 }
             } catch (Exception e) {
-                Logger.Debug($"[ManualFocuser] Could not write spike diagnostics: {e.Message}");
+                Logger.Warning($"[ManualFocuser] Could not write spike diagnostics: {e.Message}");
             }
         }
         private static IEnumerable<FocusFitSample> ToFitSamples(IEnumerable<ScatterErrorPoint> source) {

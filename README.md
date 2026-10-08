@@ -660,6 +660,12 @@ preview checks the selected central star about once per second; Spike AF updates
 the angle with its measurement frames and retains its fixed scan axis. Missing
 spikes or a changed ROI clear the displayed angle and disable **Use angle**.
 
+Plugin options → **Diagnostics → Enable diagnostic recording** controls detailed
+timing/spike logs, raw FITS/JSON archives and manual spike CSV. It defaults to OFF;
+errors and warnings are always logged. Enable it before starting the next focus
+operation when troubleshooting. Turning it off stops further recording in active
+sessions; existing diagnostic files are kept.
+
 HFR scans at fixed position intervals and uses the configured curve fit.
 The autofocus preview now shows position box plots, the fitted curve and a
 separate yellow verification box. Boxes contain frame quartiles and a median;
@@ -715,7 +721,8 @@ outside the selection box. Preview uses 1×1 binning and the current filter/gain
 It requests a hardware subframe when
 supported; otherwise it crops after full-frame download. It displays the measured
 frame interval, which includes exposure, download and processing. Raw FITS and
-matching metadata are archived under `%LOCALAPPDATA%\NINA\ManualFocuser\FocusDiagnostics`:
+matching metadata are archived, when diagnostic recording is enabled, under
+`%LOCALAPPDATA%\NINA\ManualFocuser\FocusDiagnostics`:
 every autofocus measurement frame, and live/monitor frames about every five
 seconds. In/Out uses the manual Step while the existing stream continues; the
 single-frame fallback waits for movement. Stop drains camera and motor cleanup

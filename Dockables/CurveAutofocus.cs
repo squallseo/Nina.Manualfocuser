@@ -80,8 +80,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 autofocusBoxWidth=step*.3;RaisePropertyChanged(nameof(AutoFocusBoxWidth));
                 AutoFocusMetricAxis=hfr?"HFR (px)":mask?"Bahtinov signed error (px)":"Spike FWHM (px)";
                 RaisePropertyChanged(nameof(AutoFocusMetricAxis));RaisePropertyChanged(nameof(PreviewAxisTitle));
-                diagnostics=new FocusDiagnosticSession(methodLabel+"CurveAF");
-                Logger.Info("[ManualFocuser/CurveAF] "+diagnostics.DirectoryPath);
+                diagnostics=CreateDiagnosticSession(methodLabel+"CurveAF");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info("[ManualFocuser/CurveAF] "+diagnostics.DirectoryPath);
                 await diagnostics.EventAsync(new {method=methodLabel,origin,step,offsets,positions,FramesPerPoint=count,Streaming=streaming,settings.Roi,
                     settings.Seconds,Fitting=fitting.ToString(),FittingSource="Plugin",Threshold=threshold,AutomaticRoi=false});
                 async Task<ManualFocuserModel.StreamPreviewFrame> ReadFrame(CancellationToken ct) {
@@ -249,7 +249,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     RaisePropertyChanged(nameof(FocusPreviewImage));RaisePropertyChanged(nameof(LiveDisplayImage));
                     SetAssistStatus($"{AutoFocusMetricText} | Live preview · Stop to finish");
                     long now=Stopwatch.GetTimestamp();
-                    if(lastSaved<0 || Stopwatch.GetElapsedTime(lastSaved,now).TotalSeconds>=5) {
+                    if(diagnostics.IsEnabled && (lastSaved<0 || Stopwatch.GetElapsedTime(lastSaved,now).TotalSeconds>=5)) {
                         await diagnostics.SaveAsync(frame.Pixels,frame.Width,frame.Height,new {CameraId=cameraId,Phase=phase,Position=focuserMediator.GetInfo()?.Position,FocuserMoving=IsMoving,ExposureSeconds=settings.Seconds,SensorRoi=settings.Roi});lastSaved=now;
                     }
                 }

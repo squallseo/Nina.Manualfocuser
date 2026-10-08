@@ -79,5 +79,6 @@
     <Setting Name="UseFocusStreaming" Type="System.Boolean" Scope="User"><Value Profile="(Default)">True</Value></Setting>
     <Setting Name="HfrCurveFit" Type="System.String" Scope="User"><Value Profile="(Default)">Hyperbolic</Value></Setting>
     <Setting Name="SpikeCurveFit" Type="System.String" Scope="User"><Value Profile="(Default)">Parabolic</Value></Setting>
+    <Setting Name="EnableFocusDiagnostics" Type="System.Boolean" Scope="User"><Value Profile="(Default)">False</Value></Setting>
   </Settings>
 </SettingsFile>

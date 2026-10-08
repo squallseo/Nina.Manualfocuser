@@ -946,3 +946,22 @@ Run each project with `dotnet run --project Tools/<project> -c Release
 -p:DeployPlugin=false -- <optional arguments>`. These are fake-mediator,
 synthetic-image and offline checks; they do not operate physical equipment.
 Build logs, generated previews and raw diagnostic frames are excluded from Git.
+
+## Diagnostic recording option (2026-10-08)
+
+EnableFocusDiagnostics is a new user-scoped bool, default False, mirrored in all
+three settings files. Options exposes one general Diagnostics checkbox covering
+detail/timing logs, Live/AF/AutoROI raw FITS/JSON and manual spike CSV. Old
+WriteSpikeDiagnostics settings remain readable for compatibility but no longer
+enable recording. Error/warning logs and application status remain available.
+
+Disabled sessions create no directory and skip raw validation/conversion,
+serialization and file I/O. Enabling applies to sessions started afterwards;
+turning off also stops subsequent writes from an enabled active session. Existing
+archives are not removed. The offline FITS writer checks explicitly enable their
+private sessions; regular mediator checks now run with recording off by default.
+
+--fit-options passed 14 checks including the actual checkbox/save/reload, legacy
+setting isolation, no-I/O disabled mode, enabled FITS/JSON/event output and live
+disable. bin/diagnostics-options.png is an offscreen render of the actual option
+section. Physical equipment and the NINA process were not operated for validation.

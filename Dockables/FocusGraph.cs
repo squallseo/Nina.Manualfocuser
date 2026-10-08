@@ -67,7 +67,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 throw new InvalidOperationException("Focuser disconnected, changed or busy. Graph move canceled.");
             assistCts.Token.ThrowIfCancellationRequested();
             IsMoving=true;
-            Logger.Info($"[ManualFocuser/GraphMove] position={target} keepStream=true");
+            if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser/GraphMove] position={target} keepStream=true");
             return Move();
             async Task<int> Move() {
                 int actual=await focuserMediator.MoveFocuser(target,assistCts.Token);

@@ -376,7 +376,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             try {
                 return await action();
             } catch (OperationCanceledException) {
-                Logger.Info($"[ManualFocuser] {what} cancelled");
+                if (Properties.Settings.Default.EnableFocusDiagnostics) Logger.Info($"[ManualFocuser] {what} cancelled");
                 return 0;
             } catch (Exception e) {
                 Logger.Error($"[ManualFocuser] {what} failed", e);

@@ -115,10 +115,10 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
-        public bool WriteSpikeDiagnostics {
-            get => Properties.Settings.Default.WriteSpikeDiagnostics;
+        public bool EnableFocusDiagnostics {
+            get => Properties.Settings.Default.EnableFocusDiagnostics;
             set {
-                Properties.Settings.Default.WriteSpikeDiagnostics = value;
+                Properties.Settings.Default.EnableFocusDiagnostics = value;
                 Properties.Settings.Default.Save();
                 RaisePropertyChanged();
             }

@@ -346,6 +346,14 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool EnableFocusDiagnostics {
+            get { return (bool)this["EnableFocusDiagnostics"]; }
+            set { this["EnableFocusDiagnostics"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool UseOnePass {
             get {
                 return ((bool)(this["UseOnePass"]));
