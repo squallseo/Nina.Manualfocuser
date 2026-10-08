@@ -17,20 +17,31 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class ManualFocuserDockableVM {
         private CancellationTokenSource assistCts;
         private bool assistRunning;
+        private bool assistCaptureReserved;
         private bool isStoppingFocusPreview;
         public bool IsStoppingFocusPreview => isStoppingFocusPreview;
         private double previewExposureMs = 250, previewX = 50, previewY = 50;
         private bool analyzeMask;
         private int pendingPreviewMove;
-        private string focusMode = "Manual";
+        private string focusMode = "Live";
+        private string autofocusMethod = "Spike";
+        public string AutofocusMethod {
+            get => autofocusMethod;
+            set {
+                if(assistRunning || IsMoving || (value!="Spike" && value!="Bahtinov" && value!="Linear") || value==autofocusMethod) return;
+                autofocusMethod=value; RaisePropertyChanged();
+            }
+        }
         public string FocusMode {
             get => focusMode;
             set {
-                if (focusMode == value || IsMoving) return;
+                if (focusMode == value || IsMoving || IsGoingToFocusTarget) return;
                 focusMode = value;
                 assistCts?.Cancel();
                 IsSelectingRoi = false;
                 AutoFocusPreviewVisible = false;
+                CancelGraphSelection();RaisePropertyChanged(nameof(GraphPositionMarkersVisible));
+                PublishPreviewSpikeAngle(null);
                 RaisePropertyChanged();
             }
         }
@@ -41,14 +52,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public string LiveTimingText { get; private set; } = "Timing will appear after the first live frame.";
         private ImageSource overviewImage;
         private bool isSelectingRoi;
-        public bool IsSelectingRoi { get => isSelectingRoi; private set { isSelectingRoi = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText)); } }
+        public bool IsSelectingRoi { get => isSelectingRoi; private set { isSelectingRoi = value; RaisePropertyChanged(); RaisePropertyChanged(nameof(LiveDisplayImage)); RaisePropertyChanged(nameof(RoiLocationText)); RaisePropertyChanged(nameof(GraphPositionMarkersVisible)); } }
         public ImageSource LiveDisplayImage => IsSelectingRoi ? overviewImage : FocusPreviewImage;
         public string RoiLocationText => $"{(IsSelectingRoi ? "Full frame: click a star or drag a rectangle. " : "")}ROI {PreviewRoiRectangle.Width}×{PreviewRoiRectangle.Height} px | X {PreviewCenterX:F1}%, Y {PreviewCenterY:F1}% | HFR: central 256 px";
         public ICommand SelectRoiCommand { get; private set; }
         public ICommand RefreshRoiImageCommand { get; private set; }
         public ICommand ClearLiveGraphCommand { get; private set; }
         public bool IsFocusAssistRunning => assistRunning;
-        public bool CanConfigureLive => !assistRunning && !IsCapturing && !IsMoving;
+        public bool CanConfigureLive => !assistRunning && !IsCapturing && !IsMoving && !IsGoingToFocusTarget;
         public bool CanUseFocusStreaming => CanConfigureLive && DataModel.SupportsFocusStreaming;
         public string FocusStreamAvailability => DataModel.SupportsFocusStreaming ? "Continuous streaming (experimental)" : "Single-frame preview · streaming unavailable for this camera or 3×3 bin mode";
         public bool UseFocusStreaming => Properties.Settings.Default.UseFocusStreaming;
@@ -56,8 +67,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public double PreviewCenterX { get => previewX; set { if (double.IsFinite(value)) previewX = Math.Clamp(value, 0, 100); ResetSharedFocusMeasurements(); RaisePropertyChanged(); UpdateRoiSelection(); } }
         public double PreviewCenterY { get => previewY; set { if (double.IsFinite(value)) previewY = Math.Clamp(value, 0, 100); ResetSharedFocusMeasurements(); RaisePropertyChanged(); UpdateRoiSelection(); } }
         private void ResetSharedFocusMeasurements() {
+            PublishPreviewSpikeAngle(null);
             LiveHfrPoints.Clear();
-            AutoFocusMetricPoints.Clear();
+            ClearAutofocusStatistics();
             AutoFocusMetricText = "Autofocus preview";
             RaisePropertyChanged(nameof(AutoFocusMetricText));
             DataModel.ResetPlotData();
@@ -67,7 +79,16 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             RaisePropertyChanged(nameof(LiveHfrText)); RaisePropertyChanged(nameof(PreviewMetricText)); RaisePropertyChanged(nameof(LiveStarProfile));
         }
         public bool AnalyzeBahtinov { get => analyzeMask; set { analyzeMask = value; RaisePropertyChanged(); } }
-        public ImageSource FocusPreviewImage { get; private set; }
+        private ImageSource focusPreviewImage;
+        public ImageSource FocusPreviewImage {
+            get => focusPreviewImage;
+            private set {
+                focusPreviewImage = value;
+                if (value != null && previewPixels.TryGetValue(value, out var raw) && raw.Strength != PreviewStretchStrength) {
+                    stretchRefresh?.Cancel(); _ = RefreshPreviewStretchAsync();
+                }
+            }
+        }
         public string FocusAssistStatus { get; private set; } = "Preview: center a star in the ROI. Exposure is not the delivered frame interval.";
         public ICommand StartFocusPreviewCommand { get; private set; }
         public ICommand StopFocusPreviewCommand { get; private set; }
@@ -75,6 +96,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ICommand PreviewMoveInCommand { get; private set; }
         public ICommand PreviewMoveOutCommand { get; private set; }
         private void InitializeFocusAssist() {
+            ResetPreviewStretchCommand = new RelayCommand(_ => PreviewStretchStrength = 1);
             InitializeRoiSelection();
             StartFocusPreviewCommand = new AsyncCommand<int>(() => RunGuarded("Focus preview", RunFocusPreviewAsync), _ => CanStartAssist());
             SelectRoiCommand = new AsyncCommand<int>(() => RunGuarded("Select ROI", CaptureOverviewAsync), _ => CanStartAssist());
@@ -85,13 +107,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 SetAssistStatus("Stopping; waiting for the camera...");
                 assistCts?.Cancel();
             }, _ => assistRunning && !isStoppingFocusPreview);
-            ClearLiveGraphCommand = new RelayCommand(_ => { LiveHfrPoints.Clear(); AutoFocusMetricPoints.Clear(); });
+            ClearLiveGraphCommand = new RelayCommand(_ => { LiveHfrPoints.Clear(); ClearAutofocusStatistics(); }, _ => !IsMoving);
             BahtinovAFCommand = new AsyncCommand<int>(() => RunGuarded("Bahtinov AF", RunBahtinovAfAsync), _ => CanStartAssist() && FocuserInfo?.Connected == true);
             SpikeAFCommand = new AsyncCommand<int>(() => RunGuarded("Spike AF", () => RunLiveAutofocusAsync(false)), _ => CanStartAssist() && FocuserInfo?.Connected == true);
             PreviewMoveInCommand = new RelayCommand(_ => pendingPreviewMove = -(int)Math.Clamp(Math.Abs((long)UserStep), 1, 10000),
-                _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
+                _ => assistRunning && !isStoppingFocusPreview && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
             PreviewMoveOutCommand = new RelayCommand(_ => pendingPreviewMove = (int)Math.Clamp(Math.Abs((long)UserStep), 1, 10000),
-                _ => assistRunning && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
+                _ => assistRunning && !isStoppingFocusPreview && !IsMoving && FocuserInfo?.Connected == true && pendingPreviewMove == 0);
         }
         private bool CanStartAssist() => !disposed && !assistRunning && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && CameraInfo?.Connected == true
             && !CameraInfo.IsExposing && !CameraInfo.LiveViewEnabled && cameraMediator.IsFreeToCapture(this);
@@ -130,20 +152,27 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = status });
         }
         private void BeginAssist(bool moving) {
+            PublishPreviewSpikeAngle(null);
+            cameraMediator.RegisterCaptureBlock(this);
+            assistCaptureReserved=true;
             isStoppingFocusPreview = false;
             RaisePropertyChanged(nameof(IsStoppingFocusPreview));
             assistCts?.Dispose(); assistCts = new CancellationTokenSource();
             pendingPreviewMove = 0;
+            pendingPreviewTarget=null;graphPreviewMovesEnabled=false;CancelGraphSelection();
             assistRunning = true; IsCapturing = true; if (moving) IsMoving = true;
             RaisePropertyChanged(nameof(IsFocusAssistRunning));
             RaisePropertyChanged(nameof(CanConfigureLive));
             RaisePropertyChanged(nameof(CanUseFocusStreaming));
-            cameraMediator.RegisterCaptureBlock(this);
         }
         private void EndAssist(bool moving) {
-            try { cameraMediator.ReleaseCaptureBlock(this); } catch (Exception e) { Logger.Error("Preview camera reservation release failed", e); }
+            if(assistCaptureReserved) {
+                assistCaptureReserved=false;
+                try { cameraMediator.ReleaseCaptureBlock(this); } catch (Exception e) { Logger.Error("Preview camera reservation release failed", e); }
+            }
             applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = string.Empty });
             assistRunning = false; IsCapturing = false; if (moving) IsMoving = false;
+            pendingPreviewTarget=null;graphPreviewMovesEnabled=false;
             isStoppingFocusPreview = false;
             RaisePropertyChanged(nameof(IsStoppingFocusPreview));
             RaisePropertyChanged(nameof(IsFocusAssistRunning));
@@ -153,13 +182,23 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private async Task<int> RunFocusPreviewAsync() {
             if (!CanStartAssist()) return 0;
             LatestFrameStream<ManualFocuserModel.StreamPreviewFrame> stream = null;
+            Task<int> previewMove = null;
+            async Task FinishMove() {
+                var movement=previewMove; previewMove=null;
+                try { if(await movement<0) throw new InvalidOperationException("Live focuser movement failed or the focuser disconnected."); }
+                finally { IsMoving=false; }
+            }
             try {
                 BeginAssist(false);
                 IsSelectingRoi = false;
                 RaisePropertyChanged(nameof(RoiLocationText));
                 LiveHfrPoints.Clear();
                 var clock = Stopwatch.StartNew(); long previous = 0;
+                var diagnostics = new FocusDiagnosticSession("LiveFocus");
+                long lastSaved = -5000;
+                Logger.Info("[ManualFocuser/Diagnostics] " + diagnostics.DirectoryPath);
                 int frames = 0;
+                long lastSpikeAnalysis = -1000;
                 bool streaming = UseFocusStreaming && DataModel.SupportsFocusStreaming;
                 double requestedExposureMs = PreviewExposureMs, centerX = PreviewCenterX, centerY = PreviewCenterY;
                 int roiWidth = PreviewRoiWidth, roiHeight = PreviewRoiHeight;
@@ -167,12 +206,18 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 Logger.Info($"[ManualFocuser/LiveStream] starting mode={(streaming ? "stream" : "single")} readMode={CameraInfo?.ReadoutMode} exposureMs={requestedExposureMs} roiCenter={centerX},{centerY}");
                 while (true) {
                     assistCts.Token.ThrowIfCancellationRequested();
+                    if(previewMove?.IsCompleted==true) await FinishMove();
                     if (pendingPreviewMove != 0) {
-                        if (stream != null) { await stream.DisposeAsync(); stream = null; }
+                        if(previewMove!=null) throw new InvalidOperationException("A live focuser move is already running.");
+                        if(cameraMediator.GetInfo()?.Connected!=true) throw new InvalidOperationException("Live camera disconnected. No focuser move.");
+                        if(focuserMediator.GetInfo()?.Connected!=true) throw new InvalidOperationException("Focuser disconnected.");
                         int relative = pendingPreviewMove; pendingPreviewMove = 0;
                         IsMoving = true;
-                        try { await focuserMediator.MoveFocuserRelative(relative, assistCts.Token); }
-                        finally { IsMoving = false; }
+                        Logger.Info($"[ManualFocuser/LiveMove] relative={relative} keepStream={streaming}");
+                        // The existing reader remains the sole owner of the camera SDK.
+                        // The separate focuser task changes no camera/exposure/ROI settings.
+                        previewMove=focuserMediator.MoveFocuserRelative(relative,assistCts.Token);
+                        if(!streaming) await FinishMove();
                     }
                     (double[] Pixels, int Width, int Height, bool HardwareRoi) frame;
                     ManualFocuserModel.PreviewTiming timing;
@@ -190,6 +235,21 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     var measurement = mask ? await Task.Run(() => BahtinovAnalyzer.Analyze(frame.Pixels, frame.Width, frame.Height), assistCts.Token) : null;
                     var analysisFrame = FocusRoi.CenterWindow(frame.Pixels, frame.Width, frame.Height);
                     double hfr = await Task.Run(() => QuickFocusMetrics.HalfFluxRadius(analysisFrame.Pixels, analysisFrame.Width, analysisFrame.Height), assistCts.Token);
+                    if (clock.ElapsedMilliseconds - lastSpikeAnalysis >= 1000) {
+                        var spikes = await Task.Run(() => AnalyzePreviewSpikes(frame.Pixels, frame.Width, frame.Height), assistCts.Token);
+                        assistCts.Token.ThrowIfCancellationRequested();
+                        PublishPreviewSpikeAngle(spikes);
+                        lastSpikeAnalysis = clock.ElapsedMilliseconds;
+                    }
+                    if (clock.ElapsedMilliseconds-lastSaved>=5000) {
+                        await diagnostics.SaveAsync(frame.Pixels,frame.Width,frame.Height,new {
+                            TimestampUtc=DateTime.UtcNow,CameraId=CameraInfo?.DeviceId,ExposureMs=requestedExposureMs,
+                            Gain=CameraInfo?.Gain,Offset=CameraInfo?.Offset,ReadoutMode=CameraInfo?.ReadoutMode,
+                            FocuserPosition=FocuserInfo?.Position,FocuserMoving=IsMoving,RoiWidth=roiWidth,RoiHeight=roiHeight,
+                            CenterXPercent=centerX,CenterYPercent=centerY,Hfr=hfr,Mask=measurement,DisplayStretched=false
+                        });
+                        lastSaved=clock.ElapsedMilliseconds;
+                    }
                     assistCts.Token.ThrowIfCancellationRequested();
                     double analysisMs = processingTimer.Elapsed.TotalMilliseconds;
                     processingTimer.Restart();
@@ -229,27 +289,30 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     RaisePropertyChanged(nameof(LiveTimingText));
                     if (++frames == 1 || frames % 20 == 0)
                         Logger.Info($"[ManualFocuser/LiveTiming] mode={(streaming ? "stream" : "single")} frame={frames} exposureRequestedMs={requestedExposureMs:F0} intervalMs={now-previous} source={timing.SourceWidth}x{timing.SourceHeight} roi={frame.Width}x{frame.Height} hardwareRoi={frame.HardwareRoi} mask={mask} {LiveTimingText}");
-                    SetAssistStatus($"{(streaming ? "Streaming" : "Single frames")} | {metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
+                    SetAssistStatus($"{(streaming ? "Streaming" : "Single frames")} | {(IsMoving?"Focuser moving | ":"")}{metric} | {now - previous} ms/frame | {(frame.HardwareRoi ? "camera ROI" : "software crop / full download")}");
                     previous = now;
                 }
             } catch (OperationCanceledException) { SetAssistStatus("Preview stopped."); return 0; }
             catch { SetAssistStatus("Preview failed; camera reservation released."); throw; }
             finally {
+                // A capture error/Stop also cancels the motor. Hold reservation/UI
+                // ownership until both native stream cleanup and movement finish.
+                assistCts?.Cancel();
                 try { if (stream != null) await stream.DisposeAsync(); }
                 catch { SetAssistStatus("Camera stream stop failed. Reconnect the camera before retrying."); throw; }
-                finally { EndAssist(false); }
+                finally {
+                    try {
+                        if(previewMove!=null) await FinishMove();
+                    } catch(OperationCanceledException) when(assistCts?.IsCancellationRequested==true) { }
+                    catch(Exception error) { Logger.Error("Live focuser movement cleanup failed",error); }
+                    finally { IsMoving=false; EndAssist(false); }
+                }
             }
         }
         private Task<int> RunBahtinovAfAsync() => RunLiveAutofocusAsync(true);
-        private static ImageSource RenderFocusPreview(double[] pixels, int width, int height, BahtinovMeasurement measurement) {
-            // Estimate the display stretch without cloning/sorting an entire large sensor frame.
-            var sorted = new double[Math.Min(pixels.Length, 65536)];
-            for (int i = 0; i < sorted.Length; i++) sorted[i] = pixels[(int)((long)i * pixels.Length / sorted.Length)];
-            Array.Sort(sorted);
-            double black = sorted[sorted.Length / 2], white = sorted[(int)(sorted.Length * .998)];
-            double scale = Math.Max(1, white - black);
-            var bytes = new byte[pixels.Length];
-            for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(255 * Math.Sqrt(Math.Clamp((pixels[i] - black) / scale, 0, 1)));
+        private ImageSource RenderFocusPreview(double[] pixels, int width, int height, BahtinovMeasurement measurement, double? strength = null) {
+            double level = strength ?? PreviewStretchStrength;
+            var bytes = FocusDisplayStretch.Render(pixels, level);
             var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray8, null, bytes, width);
             bitmap.Freeze();
             var group = new DrawingGroup();
@@ -265,7 +328,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     }
                 }
             }
-            var result = new DrawingImage(group); result.Freeze(); return result;
+            var result = new DrawingImage(group); result.Freeze();
+            previewPixels.Add(result, new PreviewPixels(pixels, width, height, measurement, level));
+            return result;
         }
     }
 }

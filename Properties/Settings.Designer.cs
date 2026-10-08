@@ -361,5 +361,19 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
             get { return (bool)this["UseFocusStreaming"]; }
             set { this["UseFocusStreaming"] = value; }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Hyperbolic")]
+        public string HfrCurveFit {
+            get { return (string)this["HfrCurveFit"]; }
+            set { this["HfrCurveFit"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Parabolic")]
+        public string SpikeCurveFit {
+            get { return (string)this["SpikeCurveFit"]; }
+            set { this["SpikeCurveFit"] = value; }
+        }
     }
 }

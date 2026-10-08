@@ -20,6 +20,7 @@
     <PackageReference Include="NINA.OxyPlot.Contrib.Wpf" Version="3.0.0.1001-preview3" />
     <PackageReference Include="NINA.Plugin" Version="3.2.0.9001" />
     <PackageReference Include="NINA.Profile" Version="3.2.0.9001" />
+    <PackageReference Include="NINA.PlateSolving" Version="3.2.0.9001" />
     <PackageReference Include="NINA.Sequencer" Version="3.2.0.9001" />
     <PackageReference Include="NINA.WPF.Base" Version="3.2.0.9001" />
 

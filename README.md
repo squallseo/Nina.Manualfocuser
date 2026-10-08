@@ -510,21 +510,59 @@ custom horizon. Refresh after changing location, altitude limits or waiting.
 These are visibility suggestions; binary companions, crowding, Moon separation,
 and whether the camera will saturate are not evaluated in this initial version.
 
-Select a star and press **GOTO selected star**. The mount must be connected and
-unparked, the guider disconnected, and capture, focus movement and mount slews
-idle. The altitude/horizon check is repeated immediately before moving. NINA's
-telescope mediator handles the slew; **Cancel GOTO** cancels its token. The camera
-is reserved during movement. On success the old target's focus chart and tracks
-are reset. Take a short exposure afterward to check saturation and actual spike
-detection. This version does not automatically expose, plate-solve, return to
-the original target, or operate a mask.
+Spike AF acquires one valid diffraction axis and retains it throughout each scan
+and final verification. When an exposure change discards the entire old curve,
+the new scan reacquires its axis from fresh frames. A stronger perpendicular line can still
+be reported as the measured angle, but cannot change the width being minimized.
+Geometry and SNR must remain valid on the acquired axis. Width measurements use
+three stationary frames normally. If their spread exceeds max(0.25 px, 20% of
+the median), four more frames are captured without motor movement; at least five
+of seven must agree around the median within the same tolerance. Persistent
+instability still stops AF. Saturation recovery and final minimum reproduction
+checks are retained. Both full spread and accepted-frame spread are archived.
+The AF centroid window covers the seeded stellar footprint instead of a fixed
+17-pixel patch, and the internal analysis crop is recentered after refinement.
+This keeps a large defocused ring's bright rim from displacing the diffraction
+analysis center. Multi-star/manual analysis retains its existing centroid defaults.
+During Spike AF, diffraction evidence follows the current HFR footprint as the
+star shrinks. The width/profile aperture and acquired axis stay fixed, preserving
+comparable focus measurements across motor positions.
+
+Select a star and press **GOTO**. Connect the camera and mount, unpark the mount,
+and leave capture/focus movement/mount slews idle. A connected guider no longer
+disables GOTO: the operation stops guiding through NINA before any mount movement,
+and leaves it stopped for focusing. Failure to stop guiding aborts without a slew.
+Hover over a disabled GOTO button to see the current blocking condition. The
+altitude/horizon check is repeated immediately before moving. After the slew,
+NINA's CenteringSolver captures the full sensor, solves, corrects the pointing
+and repeats until the configured centering tolerance is met (at most ten
+corrections). It uses the active profile's plate solver/blind fallback, exposure,
+binning, gain, retry settings, image scale and telescope NoSync setting. The
+current filter and camera offset are retained. The focusing exposure/ROI do not
+limit these solver images. Set the solver and centering tolerance in NINA
+**Options > Plate Solving**; configure telescope focal length and camera pixel size.
+
+**Stop GOTO** cancels movement/centering. The camera remains reserved throughout,
+and focus/live/ROI operations are disabled. Old field images and measurements
+are cleared before the slew. Only a successful final image solution within the
+tolerance reports completion and moves the shared focus ROI to sensor center;
+failures and cancellation remain explicitly unverified. Progress appears in
+NINA's application status bar, with the final residual in the focus-star card.
+Remove a Bahtinov mask while solving; the field needs enough ordinary stars and
+usable focus for the solver. Then use a short focus exposure and check saturation
+and spike detection. GOTO does not return to the original target or operate a mask.
 
 Run `dotnet run --project Tools/FocusChecks -c Release` on Windows with NINA 3.2
 installed and its catalogue initialized. The harness uses the installed native
 astronomy libraries, with no migration scripts, to verify location/time
 validation, horizontal coordinates, horizon clearance and catalogue readability.
-All 11 checks pass. It sends no equipment commands; real GOTO and NINA UI behavior
-still require simulator/in-application verification.
+All 11 checks pass. `dotnet run --project Tools/FocusCenteringChecks -c Release
+-p:DeployPlugin=false` additionally exercises NINA's real correction algorithm
+with fake capture/mount services and the plugin's GOTO lifecycle: 162 checks cover
+offset correction, full-frame settings, failure/cancellation, device changes,
+independent final-solution verification, capture reservations and UI locks.
+These checks send no equipment commands; physical centering and in-application
+UI still need field verification.
 
 Bahtinov analysis remains a follow-up stage. NINA already provides a manual
 [Bahtinov Analyzer](https://nighttime-imaging.eu/docs/master/site/tabs/imaging/).
@@ -542,31 +580,103 @@ and mode-specific focus controls leave more space for the chart. Button
 hover background and foreground use NINA's `ButtonBackgroundSelectedBrush`
 and `ButtonForegroundBrush`, following the profile color schema; normal/pressed
 background uses `ButtonBackgroundBrush`.
-The mode selector defaults to **Manual focus**, showing target and step controls
+The mode selector defaults to **Live focus**. Auto focus initially selects **Spike**. Choosing
+**Manual focus** shows target and step controls
 with **Use best** and **Expose** alongside the movement controls. Use best is enabled
 only after a valid best position has been measured. Selecting **Auto focus** replaces
-those controls with **Linear AF (HFR)**, **Bahtinov**, or **Spike**, using one
-**Run autofocus** button. **Single pass** applies to Linear AF. Changing the selection
+those controls with **Bahtinov**, **Spike**, or **HFR**, using one
+**Run autofocus** button and **Frames / position** setting (5–50 frames). Changing the selection
 does not start a run. Exposure and mouse-editable ROI are shared by all modes.
+**Auto ROI** explicitly captures the area near the chosen center and selects a
+centered star crop. With Bahtinov AF selected (or Live focus's Bahtinov overlay
+enabled), it sizes the crop for usable mask lines; otherwise it follows the star
+footprint. **Select ROI** still opens the full image for mouse editing. Live and
+autofocus starts use the current shared ROI and do not capture a scout or reselect
+it automatically. Stop the current operation before changing its selection.
 **Clear chart**
 and the running operation's **Stop focus** button are in the chart toolbar.
 The always-visible **Spike analysis** options are below the **Focus star** picker.
-Bahtinov and Spike use adaptive bounded motor steps and live preview when the host
+All three autofocus methods now use a NINA-style fixed-interval position scan.
+NINA's AF step size and initial offset count define the scan; if the minimum is
+not bracketed, extra positions are added at the same step size, within motor,
+point-count and timeout limits. The manual Live In/Out step stays separate.
+Each position collects 5–50 frames (the NINA AF frame-count setting, with a
+five-frame minimum). Robust frame medians and uncertainties feed weighted fitting;
+outliers remain visible in the box plots but do not dominate the fitted minimum.
+HFR uses the selected NINA IStarDetection behavior, including Hocus Focus,
+and its HFR, HFR scatter and star count. The plugin options page provides independent
+HFR and Spike curve choices: symmetric Hyperbolic, Parabolic, trend lines and their
+combined fits. Defaults are **Hyperbolic (symmetric)** for HFR and **Parabolic**
+for Spike. These saved plugin choices override the host's curve-model setting
+for Manual Focuser runs, using the existing NINA fitting implementations. Each run
+pins its choice at startup; edits apply to the next run. NINA's R² threshold, scan
+step, offset count and frame count still configure those aspects of the scan.
+Spike fits diffraction FWHM. Bahtinov always fits signed error with a linear model
+against position and finds its zero crossing; its options row displays this fixed model.
+The fitted position is measured independently before success is reported.
+Bahtinov requires absolute final error plus twice its uncertainty ≤0.5 pixel;
+HFR/Spike verification must agree with the measured best within noise or 15%.
+
+The camera stream stays open during scan movements. Buffered/in-flight frames
+are excluded after settling; frames captured while moving never enter the curve.
+Capturing the next position waits for its movement, but analysis of the previous
+position overlaps that movement. One queued raw frame bounds memory and detector
+calls remain serial. Stop/failure waits for outstanding motor, analysis and camera
+cleanup before releasing the camera reservation. Hocus Focus receives private
+image metadata including filter and acquisition position; detector results are
+never mutated or published into NINA image history.
+They use live preview when the host
 supports streaming; unsupported cameras use individual frames. Native QHY600M
 streaming is blocked only in 3x3 bin readout mode. Installed NINA 3.2 disables native
-ToupTek LiveView capability, so ToupTek currently uses individual frames.
+ASI and ToupTek LiveView capabilities despite providing public video capture paths.
+This plugin recognizes their native driver categories across camera models and
+aliases, and enables streaming through the same public host path. ASI requests
+RAW16 through the host and aligns ROI widths to 8 pixels and heights to 2 pixels;
+raw bit depth/Bayer metadata remain available to the analysis pipeline. Single
+captures and mouse ROI selection use the same alignment. Physical ASI streaming
+remains unverified. Driver-advertised LiveView is honored for other cameras;
+unsupported ASCOM connections retain single-frame capture.
+For ToupTek, it additionally waits for the camera's public LiveViewEnabled flag to
+clear before restoring settings or restarting the stream. ASCOM connections follow
+their advertised capability. ToupTek physical streaming remains unverified.
+ASI's installed host download blocks inside the SDK until a frame arrives and
+does not observe cancellation there. Stop drains that download before restoring
+settings; a stalled driver can leave cleanup waiting. No automatic recapture or
+second SDK connection is started while shutdown is pending.
+In Live focus, manual In/Out keeps the same stream open and updates preview
+through motor travel. Stop waits for both motor and camera cleanup before
+releasing ownership; exposure/ROI changes still require stopping the operation.
 The chart fills the remaining dock height. Only the controls scroll when the
 dock is short; the plot stays in a finite, star-sized grid row. Layout previews
 at widths 420 and 650 verified that increasing window height by 160 pixels
 increases the chart area by the same amount.
 
-Linear refers to scanning at fixed position intervals, not a straight-line fit.
-Both coarse and fine passes use a weighted quadratic fit. A short, one-sided
-fine pass can look nearly straight. The former straight arrow connected the
-last two measurements and was not a fit; it has been removed, with Δ HFR shown
-in the summary instead. Legends now identify `Measured · coarse/fine` and
-`Quadratic · coarse/fine`. Fits are visual aids: the existing autofocus stopping
-rules still use measured extrema/thresholds, not the fitted vertex.
+The image footer has a **Stretch** slider (0.25×–2.50×): left darkens the
+automatic display stretch, right brightens it, and ↺ restores 1.00×. It works
+during streaming and on a stopped preview or full-frame ROI selection without
+recapturing. Exposure, raw FITS, HFR and diffraction measurements are unchanged.
+Spike analysis displays **Detected: …°** for the latest analyzed frame. Live
+preview checks the selected central star about once per second; Spike AF updates
+the angle with its measurement frames and retains its fixed scan axis. Missing
+spikes or a changed ROI clear the displayed angle and disable **Use angle**.
+
+HFR scans at fixed position intervals and uses the configured curve fit.
+The autofocus preview now shows position box plots, the fitted curve and a
+separate yellow verification box. Boxes contain frame quartiles and a median;
+whiskers use 1.5 IQR and dots show outliers. The shared manual chart retains its
+coarse/fine visual fits. The old incremental autofocus runners are retained only
+as historical/offline reference tools; the panel no longer executes them.
+
+Position charts also control the focuser: click the X-axis or drag horizontally,
+then release to issue one absolute move. Cyan marks the current position; yellow
+previews the target. Escape, capture loss and changing panels cancel the gesture.
+Box/curve tracking remains available in the plot body. Targets are restricted to
+the visible axis range and the focuser's public travel limit. Graph moves are
+blocked during AF scanning, GOTO, motor travel and other camera workflows.
+After AF verification, graph adjustment keeps the same streaming preview open;
+the original AF result is labeled historical, and movement frames never enter
+the fitted statistics. Stop waits for both camera and motor cleanup. The Live
+focus elapsed-time chart does not interpret seconds as focuser positions.
 
 Quadratic fitting now centers and scales focuser positions before solving, then
 evaluates curves in those normalized coordinates. This avoids large powers of
@@ -576,18 +686,20 @@ positions cannot generate a fit. Three new regressions bring the core/fit checks
 to 31. Standalone layout previews were inspected at widths 420 and 650 pixels;
 they use example stars and a placeholder chart, not a running NINA screen.
 
-## Fast focus preview and experimental Bahtinov autofocus
+## Focus preview and Bahtinov autofocus
 
 실제 장비 PC에서 작업을 이어갈 때는 [현재 상태와 빌드·배포·검증 인계 문서](Docs/HardwareHandoff.md)를 참고하세요.
 
-Select **Live focus** in the focus mode list, then click **Start live** for repeated
+Select **Live focus** in the focus mode list, then click the video-camera button for repeated
 preview exposures. Default exposure is 250 ms; 100–500 ms is useful for bright stars,
 with 1–5000 ms configurable within the camera's supported exposure range. This mode
 shows a magnified star, a normalized horizontal brightness profile and a rolling
-120-second single-star HFR graph (maximum 600 points). **Clear live graph** resets
+120-second single-star HFR graph (maximum 600 points). **Clear graph** resets
 the history; changing exposure or ROI clears it too. Switching modes stops live capture.
 To select a star visually, stop live capture, click **Select ROI**, then click the
-star in the full-frame preview and click **Start live**. Letterbox margins are
+star in the full-frame preview, adjust the rectangle with the mouse and confirm
+the ROI before starting live preview. **Auto ROI** explicitly selects a suitable
+star area; autofocus startup keeps the selected ROI. Letterbox margins are
 excluded from selection. The ROI position label identifies its sensor X/Y center;
 50/50 is the sensor center. If no star is detected, the HFR display states that
 explicitly instead of showing NaN.
@@ -597,28 +709,31 @@ overlap driver work and does not isolate physical USB transfer time. Logs tagged
 `[ManualFocuser/LiveTiming]` record the first frame and every 20th frame, including
 actual source dimensions, hardware ROI and requested exposure. Compare those
 measurements before assuming the camera or CPU is the bottleneck.
-Up to 5 seconds is available when
-the mask needs more signal. Set **ROI center %** to the star's X/Y position in the
-full camera image (50/50 means the center). The preview uses a 256-pixel ROI,
-1×1 binning and the current filter/gain. It requests a hardware subframe when
+Up to 5 seconds is available when the mask needs more signal. The shared ROI
+defaults to 256 pixels and can be moved or resized visually; its size appears
+outside the selection box. Preview uses 1×1 binning and the current filter/gain.
+It requests a hardware subframe when
 supported; otherwise it crops after full-frame download. It displays the measured
-frame interval, which includes exposure, download and processing. Images are not
-saved. In/Out moves use the manual Step and run between exposures. Stop cancels
-the loop and releases the camera reservation.
+frame interval, which includes exposure, download and processing. Raw FITS and
+matching metadata are archived under `%LOCALAPPDATA%\NINA\ManualFocuser\FocusDiagnostics`:
+every autofocus measurement frame, and live/monitor frames about every five
+seconds. In/Out uses the manual Step while the existing stream continues; the
+single-frame fallback waits for movement. Stop drains camera and motor cleanup
+before releasing the camera reservation.
 
 Without a mask, the preview reports a local single-star half-flux radius; this is
 not the chart's NINA multi-star HFR. Enable **Bahtinov overlay** to overlay three
 detected lines and display signed pixel error. Invalid patterns show the HFR
 fallback or an unavailable measurement.
 
-For experimental autofocus, center an isolated star with a physical Bahtinov
-mask installed, confirm the mask checkbox under **Auto focus → Bahtinov options**, then select **Auto focus → Bahtinov
-scan (experimental) → Run Bahtinov AF**. The scan uses NINA's autofocus step size
-and initial offset count (bounded to 1–12 offsets each side). It validates the
-initial image before moving, discards one frame after movement and takes the
-median of three valid frames at each position. It searches for a signed-error
-zero bracket, interpolates only inside that bracket, approaches from the scan
-direction and verifies final absolute error ≤0.5 pixel. Invalid/unstable patterns,
+For Bahtinov autofocus, center an isolated star with a physical mask installed,
+select **Auto focus → Bahtinov**, then click **Run autofocus**. The scan uses
+NINA's autofocus step size and initial offset count (2–12 offsets each side).
+It validates the initial frames before moving, excludes buffered/in-flight
+exposures after each movement and takes the
+multi-frame statistics at each position. It fits a signed-error zero crossing
+inside a measured bracket and independently verifies the final error with its
+uncertainty. Invalid/unstable patterns,
 changed line orientation, failed moves, missing bracket or cancellation stop the
 run. The focuser remains at its current position on failure. Remove the mask and
 check ordinary-image HFR after successful focus.

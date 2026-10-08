@@ -20,6 +20,7 @@ using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Image.ImageAnalysis;
 using NINA.Profile.Interfaces;
+using NINA.PlateSolving.Interfaces;
 using NINA.WPF.Base.Interfaces.ViewModel;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.ViewModel;
@@ -55,6 +56,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private readonly IFilterWheelMediator filterWheelMediator;
         private readonly ITelescopeMediator telescopeMediator;
         private readonly IGuiderMediator guiderMediator;
+        private readonly IImagingMediator imagingMediator;
+        private readonly IDomeMediator domeMediator;
+        private readonly IDomeFollower domeFollower;
+        private readonly IPlateSolverFactory plateSolverFactory;
         private readonly ManualFocuserModel DataModel;
         // Add a field to hold the handler so we can unsubscribe
         private readonly Func<Task> linearAfHandler;
@@ -72,7 +77,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
 
         // Re-query commands on relevant device transitions, rather than every tick.
         private bool lastFocuserConnected = false;
-        private int lastGotoDeviceState;
+        private string lastGotoUnavailableReason;
 
         public int TargetPosition {
             get => Properties.Settings.Default.TargetPosition;
@@ -117,6 +122,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 _moving = value;
                 RaisePropertyChanged(nameof(CanConfigureLive));
                 RaisePropertyChanged(nameof(IsMoving));
+                RefreshGotoAvailability();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -127,6 +133,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 _capturing = value;
                 RaisePropertyChanged(nameof(CanConfigureLive));
                 RaisePropertyChanged(nameof(IsCapturing));
+                RefreshGotoAvailability();
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -158,7 +165,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public bool HasSpikePoints => IsSpikeMetricEnabled && this.DataModel.HasClearSpikes && this.DataModel.SpikeFocusPoints.Count > 0;
         public string SpikeDisplayStatus => this.DataModel.SpikeDisplayStatus;
 
-        public bool HasSpikeAngle => this.DataModel.HasClearSpikes && !double.IsNaN(this.DataModel.MeasuredSpikeAngle);
+        public bool HasSpikeAngle => double.IsFinite(DisplaySpikeAngle);
 
         public bool IsSpikeMetricEnabled => Properties.Settings.Default.EnableSpikeMetric;
 
@@ -188,15 +195,12 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         /// <summary>
         /// Orientation measured from the last frame. Reported whether or not auto
         /// mode is on, so a typed value can be checked against reality. The
-        /// multiplier is peak-over-mean of the directional profile; below roughly
-        /// 1.2 the frame has no clear spike and the number should not be trusted.
+        /// tooltip reports the directional profile's peak-over-mean strength.
+        /// Live and AF publish their private detector results here too.
         /// </summary>
         public string MeasuredAngleText {
             get {
-                var m = this.DataModel;
-                return !m.HasClearSpikes || double.IsNaN(m.MeasuredSpikeAngle)
-                    ? "not detected"
-                    : $"{m.MeasuredSpikeAngle:F1}°  (x{m.MeasuredSpikeAngleStrength:F2})";
+                return HasSpikeAngle ? $"Detected: {DisplaySpikeAngle:F1}°" : "Not detected";
             }
         }
 
@@ -246,7 +250,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ManualFocuserDockableVM(
             IProfileService profileService,
             ICameraMediator cameraMediator, IImagingMediator imagingMediator, IFilterWheelMediator filterWheelMediator, IFocuserMediator focuserMediator, ITelescopeMediator telescopeMediator,
-            IGuiderMediator guiderMediator,
+            IGuiderMediator guiderMediator, IDomeMediator domeMediator, IDomeFollower domeFollower, IPlateSolverFactory plateSolverFactory,
             IPluggableBehaviorSelector<IStarDetection> starDetectionSelector,
             IPluggableBehaviorSelector<IStarAnnotator> starAnnotatorSelector,
             IApplicationStatusMediator applicationStatusMediator) : base(profileService) {
@@ -263,6 +267,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.telescopeMediator = telescopeMediator;
             this.filterWheelMediator = filterWheelMediator;
             this.guiderMediator = guiderMediator;
+            this.imagingMediator = imagingMediator;
+            this.domeMediator = domeMediator;
+            this.domeFollower = domeFollower;
+            this.plateSolverFactory = plateSolverFactory;
 
             // Ensure static plugin helpers have the mediators so static calls won't NRE
             Cwseo.NINA.ManualFocuser.ManualFocuser.Camera = cameraMediator;
@@ -281,7 +289,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             // adopt it, then run fixed. Useful once the orientation is known good.
             UseMeasuredAngleCommand = new RelayCommand(
                 _ => Guard("Use measured angle", () => {
-                    var measured = this.DataModel.MeasuredSpikeAngle;
+                    var measured = DisplaySpikeAngle;
                     if (double.IsNaN(measured)) return;
                     SpikeAngle = measured;
                     AutoSpikeAngle = false;
@@ -320,12 +328,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             this.cameraMediator.RegisterConsumer(this);
             this.filterWheelMediator.RegisterConsumer(this);
             this.guiderMediator.RegisterConsumer(this);
-            this.linearAfHandler = () => RunGuarded("Linear AF", ExecuteLinearAFAsync);
+            this.linearAfHandler = () => RunGuarded("HFR AF", () => RunCurveAutofocusAsync("Linear",monitor:false));
             ManualFocuser.LinearAFRequested += this.linearAfHandler;
-            LinearAFCommand = new AsyncCommand<int>(() => RunGuarded("Linear AF", ExecuteLinearAFAsync), o => CanMove() && CameraInfo?.Connected == true);
+            LinearAFCommand = new AsyncCommand<int>(() => RunGuarded("HFR AF", ExecuteLinearAFAsync), o => CanMove() && CameraInfo?.Connected == true);
         }
 
         public void Dispose() {
+            stretchRefresh?.Cancel();
             if (disposed) return;
             disposed = true;
             StopObservingPreparedImages();
@@ -397,6 +406,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ApplyOnUiThread(() => {
                 FocuserInfo = deviceInfo;
                 RaisePropertyChanged(nameof(FocuserInfo));
+                RaisePropertyChanged(nameof(GraphCurrentPosition));
+                RaisePropertyChanged(nameof(GraphPositionMarkersVisible));
+                RaisePropertyChanged(nameof(CanMoveFromGraph));
                 if (deviceInfo.Connected != lastFocuserConnected) {
                     lastFocuserConnected = deviceInfo.Connected;
                     CommandManager.InvalidateRequerySuggested();
@@ -477,93 +489,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             }
         }
 
-        private async Task<int> ExecuteLinearAFInternalAsync() {
-            ResetCts();
-            // start fresh and ensure per-pass collections cleared
-            this.DataModel.CurrentPass = 0;
-            this.DataModel.ResetPlotData();
-
-            await CaptureFirstPoint();
-
-            if(MinHFR==0) {
-                Notification.ShowError($"Error during ExecuteLinearAFAsync: No stars detected. Move focuser manually (In/Out) until HFR is not zero.");
-                return await Task.FromResult(0);
-            }
-
-            // start fresh and ensure per-pass collections cleared
-            this.DataModel.CurrentPass = 0;
-            this.DataModel.ResetPlotData();
-
-            // initial coarse move: primary pass (CurrentPass == 0)
-            await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps), moveCts.Token);
-            await ExecuteShootAsync();
-            for (int i = 0; i < this.DataModel.NumInitialSteps * 2; i++) {
-                await focuserMediator.MoveFocuserRelative(-Math.Abs(this.DataModel.AFStepSize), moveCts.Token);
-                await ExecuteShootAsync();
-            }
-
-            double focusMinHFR=MinHFR;
-            double focusMaxHFR=MaxHFR;
-
-            if (Properties.Settings.Default.UseOnePass) {
-                await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps * 2), moveCts.Token);
-
-                if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION) {
-                    //Logger.Info("OnePass " + MaxStep.ToString() + " " + FocuserInfo.Position.ToString());
-                    await focuserMediator.MoveFocuserRelative((int)MaxStep-FocuserInfo.Position, moveCts.Token);
-                } else {
-                    await focuserMediator.MoveFocuserRelative((int)MinStep - FocuserInfo.Position, moveCts.Token);
-                }
-                //return await Task.FromResult(0);
-                return await ExecuteShootAsync();
-            }
-
-            //await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize * this.DataModel.NumInitialSteps * 2), moveCts.Token);
-            //await ExecuteShootAsync();
-
-            // switch to fine pass
-            this.DataModel.CurrentPass = 1;
-            // ensure secondary cleared before fine pass
-            this.DataModel.ManualFocusPointsSecondary.Clear();
-            this.DataModel.PlotFocusPointsSecondary.Clear();
-            this.DataModel.FitCurvePointsSecondary.Clear();
-
-
-            for (int i = 0; i < this.DataModel.NumInitialSteps * 3; i++) {
-                await focuserMediator.MoveFocuserRelative(Math.Abs(this.DataModel.AFStepSize ), moveCts.Token);
-                await ExecuteShootAsync();
-                if (profileService.ActiveProfile.FocuserSettings.AutoFocusMethod == AFMethodEnum.CONTRASTDETECTION) {
-                    if (this.DataModel.HFRFocusPoints.Last().Y > focusMaxHFR - (focusMaxHFR - focusMinHFR) * (1.0-profileService.ActiveProfile.FocuserSettings.RSquaredThreshold))
-                        break;
-                } else {
-                if (this.DataModel.HFRFocusPoints.Last().Y>0.0&&this.DataModel.HFRFocusPoints.Last().Y < focusMinHFR + (focusMaxHFR - focusMinHFR) * (1.0 - profileService.ActiveProfile.FocuserSettings.RSquaredThreshold))
-                        break;
-                }
-            }
-
-            return await ExecuteShootAsync();
-        }
-
-        private ManualFocuserModel.FocusCaptureSettings linearFocusCapture;
-        private async Task<int> ExecuteLinearAFAsync() {
-            if (!CanMove() || CameraInfo?.Connected != true || !cameraMediator.IsFreeToCapture(this)) {
-                Notification.ShowWarning("Manual Focuser: Linear AF requires an idle camera and a connected focuser");
-                return 0;
-            }
-            linearFocusCapture = DataModel.CreateFocusCaptureSettings(PreviewExposureMs / 1000,
-                PreviewRoiWidth, PreviewRoiHeight, PreviewCenterX, PreviewCenterY);
-            IsSelectingRoi = false;
-            cameraMediator.RegisterCaptureBlock(this);
-            IsMoving = true;
-            try {
-                return await ExecuteLinearAFInternalAsync();
-            } finally {
-                linearFocusCapture = null;
-                try { cameraMediator.ReleaseCaptureBlock(this); } catch (Exception e) { Logger.Error("Linear AF camera reservation release failed", e); }
-                IsMoving = false;
-                applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser", Status = string.Empty });
-            }
-        }
+        private Task<int> ExecuteLinearAFAsync() => RunCurveAutofocusAsync("Linear");
 
         private async Task<int> ExecuteMoveInAsync() {
             ResetCts();
@@ -595,7 +521,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
 
         private async Task<int> ExecuteShootAsync() {
-            if (linearFocusCapture == null && !Properties.Settings.Default.TakeShootAfterMove) return 0;
+            if (!Properties.Settings.Default.TakeShootAfterMove) return 0;
 
             var camera = CameraInfo;
             if (camera?.Connected != true) return 0;
@@ -615,14 +541,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             ResetCaptureCts();
             IsSelectingRoi = false;
             IsCapturing = true;
-            bool ownsCaptureBlock = linearFocusCapture == null;
+            bool ownsCaptureBlock = true;
             if (ownsCaptureBlock) cameraMediator.RegisterCaptureBlock(this);
             try {
                 // N.I.N.A. calls progress.Report unconditionally in places, so a null
                 // progress is an NRE waiting to happen. Progress<T> would marshal every
                 // report onto the dispatcher, so use a sink that simply discards.
                 IProgress<ApplicationStatus> progress = NullProgress<ApplicationStatus>.Instance;
-                var focusCapture = linearFocusCapture ?? DataModel.CreateFocusCaptureSettings(PreviewExposureMs / 1000,
+                var focusCapture = DataModel.CreateFocusCaptureSettings(PreviewExposureMs / 1000,
                     PreviewRoiWidth, PreviewRoiHeight, PreviewCenterX, PreviewCenterY);
                 applicationStatusMediator.StatusUpdate(new ApplicationStatus { Source = "Manual Focuser",
                     Status = $"Focus exposure {focusCapture.Seconds:F3} s | ROI {focusCapture.Roi.Width}×{focusCapture.Roi.Height} px" });
@@ -674,6 +600,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             RaisePropertyChanged(nameof(SpikeDisplayStatus));
             RaisePropertyChanged(nameof(HasSpikeAngle));
             RaisePropertyChanged(nameof(MeasuredAngleText));
+            RaisePropertyChanged(nameof(MeasuredAngleTooltip));
             RaisePropertyChanged(nameof(IsSpikeMetricEnabled));
             RaisePropertyChanged(nameof(SpikeAngle));
             RaisePropertyChanged(nameof(AutoSpikeAngle));

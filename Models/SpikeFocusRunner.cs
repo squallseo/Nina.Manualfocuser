@@ -5,11 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 namespace Cwseo.NINA.ManualFocuser.Models {
     public static class SpikeFocusRunner {
-        public static async Task<(int Position, double Width)> RunAsync(int origin, int step, int offsets, Func<int, CancellationToken, Task<int>> move, Func<int, CancellationToken, Task<double>> measure, CancellationToken token) {
+        public static async Task<(int Position, double Width)> RunAsync(int origin, int step, int offsets, Func<int, CancellationToken, Task<int>> move, Func<int, CancellationToken, Task<double>> measure, CancellationToken token,Func<double> measurementUncertainty=null) {
             if (step < 4 || step > 10000 || offsets < 1 || offsets > 12 || origin < (long)step * offsets || origin + (long)step * offsets > int.MaxValue)
                 throw new ArgumentException("Invalid bounded spike scan range.");
             int lower = origin - step * offsets, upper = origin + step * offsets;
             var samples = new SortedDictionary<int, double>();
+            var uncertainties = new Dictionary<int,double>();
+            bool ClearlyLess(int first,int second) => samples[second]-samples[first]>
+                FocusMeasurementNoise.DifferenceThreshold(uncertainties[first],uncertainties[second]);
             async Task Move(int p) {
                 token.ThrowIfCancellationRequested();
                 if (p < lower || p > upper || await move(p, token) != p)
@@ -22,6 +25,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 token.ThrowIfCancellationRequested();
                 if (!double.IsFinite(w) || w <= 0)
                     throw new InvalidOperationException("Spike lost. No further moves.");
+                double uncertainty=measurementUncertainty?.Invoke() ?? 0;
+                FocusMeasurementNoise.DifferenceThreshold(uncertainty,0);
+                uncertainties[p]=uncertainty;
                 return w;
             }
             async Task<double> Sample(int p) {
@@ -33,28 +39,42 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 return w;
             }
             samples[origin] = await Read(origin);
-            double right = await Sample(origin + step);
-            int direction = right < samples[origin] ? 1 : -1, current = direction > 0 ? origin + step : origin - step;
-            await Sample(current);
+            await Sample(origin + step);
+            int direction = ClearlyLess(origin+step,origin) ? 1 : ClearlyLess(origin,origin+step) ? -1 : 0;
+            int current = direction > 0 ? origin + step : origin - step;
+            if(direction<=0) await Sample(current);
+            if(direction==0 && ClearlyLess(current,origin)) direction=-1;
             long stride = step;
             int a = 0, b = 0, c = 0;
             bool bracketed = false;
             // Expand only while seeking a measured minimum, never outside the original bounds.
             for (int iteration = 0; iteration < 14; iteration++) {
                 var points = samples.ToArray();
-                for (int i = 1; i < points.Length - 1; i++)
-                    if (points[i].Value < points[i - 1].Value && points[i].Value < points[i + 1].Value) {
-                        a = points[i - 1].Key;
-                        b = points[i].Key;
-                        c = points[i + 1].Key;
+                foreach(var candidatePoint in points.OrderBy(p=>p.Value)) {
+                    var leftEvidence=points.Where(p=>p.Key<candidatePoint.Key && ClearlyLess(candidatePoint.Key,p.Key)).ToArray();
+                    var rightEvidence=points.Where(p=>p.Key>candidatePoint.Key && ClearlyLess(candidatePoint.Key,p.Key)).ToArray();
+                    if(leftEvidence.Length>0 && rightEvidence.Length>0) {
+                        a = leftEvidence[^1].Key;
+                        b = candidatePoint.Key;
+                        c = rightEvidence[0].Key;
                         bracketed = true;
                         break;
                     }
+                }
                 if (bracketed)
                     break;
-                if (samples.Values.All(v => v == samples[origin]))
-                    throw new InvalidOperationException("Flat spike widths cannot locate focus.");
                 stride = Math.Min(stride * 2, (long)step * offsets);
+                if(direction==0) {
+                    int rightProbe=(int)Math.Clamp(origin+stride,lower,upper);
+                    int leftProbe=(int)Math.Clamp(origin-stride,lower,upper);
+                    bool haveBoth=samples.ContainsKey(rightProbe) && samples.ContainsKey(leftProbe);
+                    if(haveBoth) throw new InvalidOperationException("Spike width changes remain below measurement noise in the bounded range. Increase AF step size or improve the measurement.");
+                    await Sample(rightProbe);
+                    await Sample(leftProbe);
+                    int best=samples.OrderBy(p=>p.Value).First().Key;
+                    if(ClearlyLess(best,origin)) { direction=Math.Sign(best-origin); current=best; }
+                    continue;
+                }
                 int next = (int)Math.Clamp(current + direction * stride, lower, upper);
                 if (next == current)
                     throw new InvalidOperationException("No interior spike-width minimum in the bounded range.");

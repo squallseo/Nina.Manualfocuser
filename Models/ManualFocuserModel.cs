@@ -24,6 +24,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
     public partial class ManualFocuserModel {
         public sealed record PreviewTiming(double CaptureAndDownloadMs, double HostDownloadMs, double ConversionMs, double CropMs, int SourceWidth, int SourceHeight);
         public PreviewTiming LastPreviewTiming { get; private set; }
+        public int LastPreviewBitDepth { get; private set; } = 16;
+        public bool LastPreviewIsBayered { get; private set; }
         private readonly IProfileService profileService;
         private readonly IImagingMediator imagingMediator;
         private readonly ICameraMediator cameraMediator;
@@ -99,6 +101,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         }
 
         public void AddHFRPoint(int position, MeasureAndError measurement) {
+            // Failed detections are not measurements. In particular, never send a
+            // double.MaxValue sentinel to the plot's best-point annotation/axes.
+            if (!double.IsFinite(measurement.Measure) || measurement.Measure <= 0 || measurement.Measure == double.MaxValue ||
+                !double.IsFinite(measurement.Stdev)) {
+                Logger.Warning($"[ManualFocuser] Skipping invalid HFR at position {position}");
+                return;
+            }
             var idx = HFRFocusPoints.Count();
 
             var step = Convert.ToDouble(position);
@@ -119,9 +128,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 }
             } else {
                 MinStep = position;
-                if(hfr > 0.0) {
-                    MinHFR = hfr;
-                }else MinHFR = double.MaxValue;
+                MinHFR = hfr;
                 MaxHFR = hfr;
                 MaxStep = position;
             }
@@ -301,8 +308,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 throw new ArgumentException("Invalid preview exposure or ROI.");
             if ((camera.ExposureMin > 0 && seconds < camera.ExposureMin) || (camera.ExposureMax > 0 && seconds > camera.ExposureMax))
                 throw new InvalidOperationException($"Preview exposure is outside the camera range ({camera.ExposureMin}–{camera.ExposureMax} seconds).");
-            var roi = FocusRoi.Fit(camera.XSize, camera.YSize, roiSize, roiHeight ?? roiSize, centerXPercent, centerYPercent,
-                camera.DeviceId?.StartsWith("QHY600M-", StringComparison.OrdinalIgnoreCase) == true ? 4 : 2);
+            var roi = FocusCameraSupport.FitRoi(camera.DeviceId,camera.XSize,camera.YSize,roiSize,roiHeight ?? roiSize,centerXPercent,centerYPercent);
             int x = roi.X, y = roi.Y, size = roi.Width, sizeY = roi.Height;
             var seq = new CaptureSequence(seconds, CaptureSequence.ImageTypes.SNAPSHOT, null, null, 1) {
                 Binning = new BinningMode(1, 1), EnableSubSample = camera.CanSubSample && !overview
@@ -319,6 +325,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double conversionMs = timer.Elapsed.TotalMilliseconds;
             timer.Restart();
             if (image?.Properties == null || image.Data?.FlatArray == null) throw new InvalidOperationException("Preview image contains no pixels.");
+            LastPreviewBitDepth=image.Properties.BitDepth;LastPreviewIsBayered=image.Properties.IsBayered;
             int width = image.Properties.Width, height = image.Properties.Height;
             var raw = image.Data.FlatArray;
             if (width < 1 || height < 1 || (long)width * height != raw.Length) throw new InvalidOperationException("Invalid preview image dimensions.");

@@ -15,8 +15,31 @@ internal static class WorkflowChecks {
         check(await Fails(async () => await BahtinovFocusRunner.RunAsync(1000, 100, 2, Move, (p, t) => Task.FromResult(double.NaN), default)) && moves.Count == 0,
             "Invalid preflight issues no motor command");
         moves.Clear();
-        check(await Fails(async () => await BahtinovFocusRunner.RunAsync(1000, 100, 2, Move, (p, t) => Task.FromResult(2.0), default)) && moves.Count == 1,
-            "Flat mask error stops after the initial slope probe");
+        check(await Fails(async () => await BahtinovFocusRunner.RunAsync(1000, 100, 2, Move, (p, t) => Task.FromResult(2.0), default))
+            && moves.Count<=4 && moves.All(p=>p>=800&&p<=1200),
+            "Flat mask error stops after bounded larger slope probes");
+        foreach(int initialStep in new[]{600,2500}) {
+            moves.Clear();
+            var scaled=await BahtinovFocusRunner.RunAsync(20000,initialStep,8,Move,
+                (p,t)=>Task.FromResult((p-16600)/6000.0),default,()=>.12);
+            check(Math.Abs(scaled.Error)<=.25 && moves.All(p=>p>=20000-initialStep*8 && p<=20000+initialStep*8),
+                $"Mask AF with {initialStep} initial step detects usable slope and verifies zero within original bounds");
+            if(initialStep==600)check(moves.Any(p=>Math.Abs(p-20000)>600),"Small mask changes trigger a larger calibration movement");
+        }
+        moves.Clear();
+        var noisyProbe=await BahtinovFocusRunner.RunAsync(20000,600,8,Move,
+            (p,t)=>Task.FromResult((p-16600)/6000.0+(p==20600?-.2:0)),default,()=>.12);
+        check(Math.Abs(noisyProbe.Error)<=.25 && moves.Any(p=>Math.Abs(p-20000)>=2400),
+            "A noisy reversed small mask change requires larger evidence before zero prediction");
+        moves.Clear();
+        check(await Fails(async()=>await BahtinovFocusRunner.RunAsync(20000,600,4,Move,
+            (p,t)=>Task.FromResult(2+.03*Math.Sin(p)),default,()=>.2))
+            && moves.All(p=>p>=17600&&p<=22400) && moves.Count<=5,
+            "Noise-only mask changes never invent a direction or verified zero");
+        moves.Clear();
+        check(await Fails(async()=>await BahtinovFocusRunner.RunAsync(20000,600,4,Move,
+            (p,t)=>Task.FromResult(2.0),default,()=>double.NaN)) && moves.Count==0,
+            "Invalid mask uncertainty stops before a motor command");
         moves.Clear();
         int targetReads = 0;
         check(await Fails(async () => await BahtinovFocusRunner.RunAsync(1000, 100, 2, Move, (p, t) => Task.FromResult(p == 1030 && ++targetReads > 1 ? 2.0 : (p - 1030) / 50.0), default)),

@@ -4,6 +4,52 @@ using System.Numerics;
 int checks = 0;
 void Check(bool value, string name) { if (!value) throw new Exception(name); checks++; Console.WriteLine("PASS " + name); }
 await WorkflowChecks.Run(Check);
+await BatchChecks.Run(Check);
+int replayArgument=Array.IndexOf(args,"--replay");
+if(replayArgument>=0) BatchChecks.Replay(args[replayArgument+1],Check);
+int saturationArgument=Array.IndexOf(args,"--saturation-replay");
+if(saturationArgument>=0) BatchChecks.ReplaySaturation(args[saturationArgument+1],Check);
+var displaySource = Enumerable.Range(0,16384).Select(i=>1000.0+i%31-15).ToArray();
+displaySource[8192]=30000;
+var savedSource=(double[])displaySource.Clone();
+var display=FocusDisplayStretch.Render(displaySource);
+Check(displaySource.SequenceEqual(savedSource),"Auto stretch never changes analysis pixels");
+Check(Math.Abs(display[15]-255*.12)<=1,"Auto stretch maps median background to its target brightness");
+var brighterDisplay=FocusDisplayStretch.Render(displaySource.Select(v=>v*2+400).ToArray());
+Check(Math.Abs(brighterDisplay[15]-display[15])<=1,"Auto stretch follows exposure/gain and background changes");
+Check(display[8192]>display[15] && display[8192]==255,"Auto stretch preserves bright-star contrast");
+Check(FocusDisplayStretch.Render(new double[64]).All(v=>v==0),"Blank preview stays black without invalid midtones");
+const int scoutSize=512;
+var scoutPixels=new double[scoutSize*scoutSize];
+for(int y=0;y<scoutSize;y++)for(int x=0;x<scoutSize;x++) {
+    double dx=x-278,dy=y-240,r2=dx*dx+dy*dy;
+    double value=100+20000*Math.Exp(-r2/8);
+    if(r2<150*150) for(int k=0;k<3;k++) {
+        double angle=(65+k*25)*Math.PI/180, d=dx*Math.Cos(angle)+dy*Math.Sin(angle)-(k==1?3:0);
+        value+=300*Math.Exp(-d*d/2);
+    }
+    scoutPixels[y*scoutSize+x]=Math.Round(value);
+}
+scoutPixels[400*scoutSize+400]=65535;
+var autoRoi=BahtinovAutoRoi.Find(scoutPixels,scoutSize,scoutSize,default);
+Check(Math.Abs(autoRoi.Roi.X+autoRoi.Roi.Width/2.0-278)<2 && Math.Abs(autoRoi.Roi.Y+autoRoi.Roi.Height/2.0-240)<2,
+    "Automatic mask ROI centers the off-center star rather than an isolated hot pixel");
+Check(autoRoi.Measurement.IsValid && Math.Abs(Math.Abs(autoRoi.Measurement.SignedErrorPixels)-3)<.7,
+    "Automatic ROI retains synthetic signed mask geometry");
+bool blankRejected=false; try { BahtinovAutoRoi.Find(new double[512*512],512,512,default); } catch(InvalidOperationException) { blankRejected=true; }
+Check(blankRejected,"Blank scout never invents an automatic mask ROI");
+using(var canceledScout=new CancellationTokenSource()) {
+    canceledScout.Cancel(); bool cancelled=false;
+    try { BahtinovAutoRoi.Find(scoutPixels,512,512,canceledScout.Token); } catch(OperationCanceledException) { cancelled=true; }
+    Check(cancelled,"Automatic ROI search respects Stop before accepting a crop");
+}
+var diagnostic=new FocusDiagnosticSession("Checks",Path.Combine(AppContext.BaseDirectory,"diagnostics"));
+double[] diagnosticPixels=Enumerable.Range(0,1024).Select(i=>(double)(i*64)).ToArray();diagnosticPixels[0]=0;diagnosticPixels[^1]=65535;
+string diagnosticId=await diagnostic.SaveAsync(diagnosticPixels,32,32,new{ExposureSeconds=.05,FocuserPosition=1000,Raw=true});
+var savedFits=Cwseo.NINA.ManualFocuser.Tools.SpikeBatch.FitsImage.Load(Path.Combine(diagnostic.DirectoryPath,diagnosticId+".fits"));
+Check(savedFits.Data.Select(v=>(double)v).SequenceEqual(diagnosticPixels),"Diagnostic FITS preserves unsigned raw ADU, dimensions and byte order exactly");
+await diagnostic.EventAsync(new{Frame=diagnosticId,Error=double.NaN,Failure="unstable"});
+Check(File.ReadAllText(Path.Combine(diagnostic.DirectoryPath,"measurements.jsonl")).Contains("unstable"),"Invalid measurement and failure reason remain in the diagnostic archive");
 double[] Lines(double error, double rotation = 0) {
     const int n = 128; var image = new double[n*n];
     for (int y=0;y<n;y++) for(int x=0;x<n;x++) {
@@ -19,6 +65,18 @@ foreach(double angle in new[]{0.0,37,90,167}) foreach(double error in new[]{-3.0
     Check(Math.Abs(Math.Abs(m.SignedErrorPixels)-Math.Abs(error))<.65,"Normal geometry magnitude");
 }
 var plus=BahtinovAnalyzer.Analyze(Lines(3),128,128);var minus=BahtinovAnalyzer.Analyze(Lines(-3),128,128);
+var isolatedClip = Lines(3); isolatedClip[16*128+16] = 65535;
+Check(!FocusSaturation.HasClippedAnalysisArea(isolatedClip,128,128,true),"Isolated clipped defect does not falsely reject the mask frame");
+var clippedCore = Lines(3);
+for(int y=60;y<68;y++)for(int x=60;x<68;x++)clippedCore[y*128+x]=65535;
+Check(!FocusSaturation.HasClippedAnalysisArea(clippedCore,128,128,true),"Clipped central core outside mask analysis annulus is permitted");
+var clippedMask = BahtinovAnalyzer.Analyze(clippedCore,128,128);
+Check(clippedMask.IsValid && Math.Abs(clippedMask.SignedErrorPixels-plus.SignedErrorPixels)<.2,"Central clipping preserves synthetic mask line geometry");
+Check(FocusSaturation.HasClippedAnalysisArea(clippedCore,128,128,false),"Clipped stellar core still blocks width autofocus");
+for(int x=90;x<94;x++)clippedCore[64*128+x]=65535;
+Check(FocusSaturation.HasClippedAnalysisArea(clippedCore,128,128,true),"Four connected clipped diffraction-line pixels reject mask autofocus");
+var outside = new double[512*512]; for(int y=2;y<6;y++)for(int x=2;x<6;x++)outside[y*512+x]=65535;
+Check(!FocusSaturation.HasClippedAnalysisArea(outside,512,512,false),"Clipping outside central star measurement window does not block Spike");
 Check(plus.SignedErrorPixels*minus.SignedErrorPixels<0,"Opposite defocus has opposite sign");
 Check(!BahtinovAnalyzer.Analyze(new double[128*128],128,128).IsValid,"Blank image invalid, never zero focus");
 var blob=new double[128*128]; for(int y=0;y<128;y++)for(int x=0;x<128;x++)blob[y*128+x]=1000*Math.Exp(-((x-63.5)*(x-63.5)+(y-63.5)*(y-63.5))/8);
@@ -36,7 +94,7 @@ var edge=new double[128*128];edge[3*128+3]=1000;
 Check(double.IsNaN(QuickFocusMetrics.HalfFluxRadius(edge,128,128)),"Clipped edge star rejected");
 var hot=new double[128*128];hot[64*128+64]=1000;
 Check(double.IsNaN(QuickFocusMetrics.HalfFluxRadius(hot,128,128)),"Isolated hot pixel rejected");
-string folder=args.Length>0?args[0]:Path.Combine(AppContext.BaseDirectory,"samples");Directory.CreateDirectory(folder);
+string folder=args.Length>0 && !args[0].StartsWith("--")?args[0]:Path.Combine(AppContext.BaseDirectory,"samples");Directory.CreateDirectory(folder);
 var opticalErrors=new List<double>();
 foreach(double defocus in new[]{-2.0,-1,0,1,2}) {
     var image=PupilImage(defocus);var m=BahtinovAnalyzer.Analyze(image,256,256);

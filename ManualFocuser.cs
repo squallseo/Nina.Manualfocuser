@@ -90,6 +90,22 @@ namespace Cwseo.NINA.ManualFocuser {
             }
         }
 
+        public IReadOnlyList<FocusCurveChoice> AutofocusCurveChoices => FocusCurveOptions.Choices;
+        public FocusCurveModel HfrCurveFit {
+            get => FocusCurveOptions.Parse(Settings.Default.HfrCurveFit,FocusCurveModel.Hyperbolic);
+            set {
+                if(!FocusCurveOptions.IsWidthModel(value)) return;
+                Settings.Default.HfrCurveFit=value.ToString();Settings.Default.Save();RaisePropertyChanged();
+            }
+        }
+        public FocusCurveModel SpikeCurveFit {
+            get => FocusCurveOptions.Parse(Settings.Default.SpikeCurveFit,FocusCurveModel.Parabolic);
+            set {
+                if(!FocusCurveOptions.IsWidthModel(value)) return;
+                Settings.Default.SpikeCurveFit=value.ToString();Settings.Default.Save();RaisePropertyChanged();
+            }
+        }
+
         public bool EnableSpikeMetric {
             get => Properties.Settings.Default.EnableSpikeMetric;
             set {

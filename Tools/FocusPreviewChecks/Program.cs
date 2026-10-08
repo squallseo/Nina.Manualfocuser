@@ -152,6 +152,16 @@ var largeShared = model.CreateFocusCaptureSettings(.35,4096,3072,99,99);
 Check(largeShared.Roi.Width == 4096 && largeShared.Roi.Height == 3072 && largeShared.Roi.X % 4 == 0
     && largeShared.Roi.X+largeShared.Roi.Width <= 9600 && largeShared.Roi.Y+largeShared.Roi.Height <= 6422,
     "Shared capture allows large ROIs and preserves native camera alignment at sensor edges");
+model.ResetPlotData();
+foreach(double invalid in new[]{0.0,-1,double.NaN,double.PositiveInfinity,double.MaxValue}) {
+    model.AddHFRPoint(1000,new NINA.WPF.Base.ViewModel.AutoFocus.MeasureAndError{Measure=invalid,Stdev=1000});
+    Check(model.GetFocusPointSize()==0 && model.MinHFR==0 && model.PlotFocusPoints.Count==0,
+        $"Invalid HFR {invalid} cannot produce a sentinel best annotation or plotted point");
+}
+model.AddHFRPoint(1000,new NINA.WPF.Base.ViewModel.AutoFocus.MeasureAndError{Measure=2.5,Stdev=.1});
+Check(model.GetFocusPointSize()==1 && model.MinHFR==2.5 && model.MinStep==1000,"First valid measurement after failure restores the best point normally");
+model.AddHFRPoint(1100,new NINA.WPF.Base.ViewModel.AutoFocus.MeasureAndError{Measure=0,Stdev=1000});
+Check(model.GetFocusPointSize()==1 && model.MinHFR==2.5 && model.MinStep==1000,"Later detection failure preserves the previous valid best without changing chart scale");
 Console.WriteLine($"{passed} integration checks passed; no hardware accessed.");
 
 public class Fake : DispatchProxy {

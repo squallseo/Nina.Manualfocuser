@@ -1,9 +1,22 @@
 using Cwseo.NINA.ManualFocuser.Models;
 int passed = 0;
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); passed++; Console.WriteLine("PASS " + message); }
+if(args.Length>1 && args[0]=="--probe") GateProbe.Run(args[1]);
+else if(args.Length>1 && args[0]=="--frames") foreach(string path in args.Skip(1)) DefocusChecks.ReplayFrame(path,Check);
+else if(args.Length>1 && args[0]=="--convergence") ConvergenceChecks.Replay(args[1],Check);
+else if(args.Length>1 && args[0]=="--defocus") DefocusChecks.Replay(args[1],Check);
+else if(args.Length>1 && args[0]=="--session") FieldChecks.ReplaySession(args[1],Check);
+else if(args.Length>0) FieldChecks.Replay(args[0],Check);
 async Task Reject<T>(Func<Task> action, string message) where T : Exception {
     bool rejected = false; try { await action(); } catch (T) { rejected = true; } Check(rejected,message);
 }
+await ExposureChecks.Run(Check);
+await StabilityChecks.Run(Check);
+await StepChecks.Run(Check);
+DefocusChecks.Synthetic(Check);
+GeometryChecks.Run(Check);
+ConvergenceChecks.Synthetic(Check);
+AutoRoiChecks.Run(Check);
 var moves = new List<int>();
 Task<int> Move(int position,CancellationToken token) { moves.Add(position); return Task.FromResult(position); }
 int adaptiveReads = 0;

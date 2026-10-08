@@ -1,4 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
   <ItemGroup><Compile Include="../../Models/SpikeFocusRunner.cs" Link="SpikeFocusRunner.cs"/><Compile Include="../../Models/SpikeCore.cs" Link="SpikeCore.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/SpikeExposureRunner.cs" Link="SpikeExposureRunner.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/SpikeMeasurementBatch.cs" Link="SpikeMeasurementBatch.cs" /><Compile Include="../../Models/SpikeAutofocusAnalysis.cs" Link="SpikeAutofocusAnalysis.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/QuickFocusMetrics.cs" Link="QuickFocusMetrics.cs" /><Compile Include="../../Models/FocusRoi.cs" Link="FocusRoi.cs" /><Compile Include="../SpikeBatch/Fits.cs" Link="Fits.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusStarLocator.cs" Link="FocusStarLocator.cs" /><Compile Include="../../Models/SpikeAutoRoi.cs" Link="SpikeAutoRoi.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusSaturation.cs" Link="FocusSaturation.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusMeasurementNoise.cs" Link="FocusMeasurementNoise.cs" /></ItemGroup>
 </Project>

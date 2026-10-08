@@ -2,6 +2,12 @@
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
   <ItemGroup><Compile Include="../../Models/BahtinovAnalyzer.cs" Link="BahtinovAnalyzer.cs" /><Compile Include="../../Models/BahtinovFocusController.cs" Link="BahtinovFocusController.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../../Models/QuickFocusMetrics.cs" Link="QuickFocusMetrics.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusSaturation.cs" Link="FocusSaturation.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusDisplayStretch.cs" Link="FocusDisplayStretch.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusRoi.cs" Link="FocusRoi.cs" /><Compile Include="../../Models/BahtinovAutoRoi.cs" Link="BahtinovAutoRoi.cs" /><Compile Include="../../Models/FocusDiagnosticSession.cs" Link="FocusDiagnosticSession.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../../Models/BahtinovFocusRunner.cs" Link="BahtinovFocusRunner.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/BahtinovMeasurementBatch.cs" Link="BahtinovMeasurementBatch.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusMeasurementNoise.cs" Link="FocusMeasurementNoise.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../Models/FocusStarLocator.cs" Link="FocusStarLocator.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../SpikeBatch/Fits.cs" Link="Fits.cs" /></ItemGroup>
 </Project>

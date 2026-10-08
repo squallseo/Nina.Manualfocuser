@@ -11,8 +11,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             if (!double.IsFinite(seconds) || seconds <= 0 ||
                 (camera.ExposureMin > 0 && seconds < camera.ExposureMin) || (camera.ExposureMax > 0 && seconds > camera.ExposureMax))
                 throw new ArgumentException("Focus exposure is outside the camera range.");
-            var roi = FocusRoi.Fit(camera.XSize, camera.YSize, width, height, x, y,
-                camera.DeviceId?.StartsWith("QHY600M-", StringComparison.OrdinalIgnoreCase) == true ? 4 : 2);
+            var roi = FocusCameraSupport.FitRoi(camera.DeviceId,camera.XSize,camera.YSize,width,height,x,y);
             return new FocusCaptureSettings(seconds, roi, camera.XSize, camera.YSize);
         }
         public static ushort[] CropFocusPixels(ushort[] pixels, int width, int height, FocusCaptureSettings settings) {

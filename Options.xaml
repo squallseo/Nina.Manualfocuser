@@ -6,6 +6,22 @@
     <DataTemplate x:Key="Manual Focuser_Options">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="6" HorizontalAlignment="Left" MinWidth="320">
+                <TextBlock Text="Autofocus curve fitting" FontWeight="Bold" Margin="5,0,0,6"/>
+                <Grid Margin="5,0,0,6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="82"/><ColumnDefinition Width="220"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock Text="HFR" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                    <ComboBox Grid.Column="1" Margin="0,0,0,6" ItemsSource="{Binding AutofocusCurveChoices}" DisplayMemberPath="Label" SelectedValuePath="Model"
+                              SelectedValue="{Binding HfrCurveFit, Mode=TwoWay}" ToolTip="Default: symmetric Hyperbolic. Applies to the next HFR autofocus run."/>
+                    <TextBlock Grid.Row="1" Text="Spike" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" ItemsSource="{Binding AutofocusCurveChoices}" DisplayMemberPath="Label" SelectedValuePath="Model"
+                              SelectedValue="{Binding SpikeCurveFit, Mode=TwoWay}" ToolTip="Default: Parabolic. Fits the diffraction-spike FWHM minimum."/>
+                    <TextBlock Grid.Row="2" Text="Bahtinov" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="Linear (zero crossing)" VerticalAlignment="Center"
+                               ToolTip="Fits signed mask error and finds where it crosses zero. This method always uses linear fitting."/>
+                </Grid>
+                <TextBlock Margin="5,0,0,12" MaxWidth="302" TextWrapping="Wrap" Foreground="{StaticResource SecondaryBrush}"
+                           Text="These choices apply to Manual Focuser autofocus. Scan step, frame count and minimum R² use NINA's autofocus settings."/>
                 <TextBlock Text="Live focus" FontWeight="Bold" Margin="5,0,0,6"/>
                 <CheckBox Content="Use continuous camera streaming" IsChecked="{Binding UseFocusStreaming}" Margin="5,0,0,12"
                           ToolTip="Applies on the next Start live. Unsupported cameras and QHY600M 3×3 bin mode use individual exposures."/>

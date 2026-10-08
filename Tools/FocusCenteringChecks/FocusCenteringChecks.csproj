@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    <NinaInstallDir>$(ProgramW6432)\N.I.N.A. - Nighttime Imaging 'N' Astronomy</NinaInstallDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../ManualFocuser.csproj" AdditionalProperties="DeployPlugin=false" />
+    <None Include="$(NinaInstallDir)\External\x64\SOFA\*.dll" Link="External\x64\SOFA\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NinaInstallDir)\External\x64\NOVAS\*" Link="External\x64\NOVAS\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NinaInstallDir)\External\JPLEPH" Link="External\JPLEPH" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NinaInstallDir)\vcruntime140.dll" Link="vcruntime140.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NinaInstallDir)\SQLite.Interop.dll" Link="SQLite.Interop.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

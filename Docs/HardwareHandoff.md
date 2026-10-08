@@ -330,3 +330,619 @@ any streaming host call (FocusStreamChecks now 44). No ToupTek camera was captur
 or physically validated. Existing startup logs also report toupcam.dll dependency
 load failure in the installed NINA camera-discovery path; that environment problem
 is separate from the disabled streaming capability.
+## Native ToupTek streaming enabled (2026-10-07)
+
+At user request, the native ToupTek_ device-ID prefix now enables public mediator
+LiveView despite NINA's disabled UI capability. The live/auto workflows use the
+same shared ROI/exposure and capture reservation as QHY. ASCOM and OEM categories
+are not included in this override. GetDevice() must return the same ICamera ID.
+
+After the host enumerator closes, cleanup waits on that original camera's public
+Connected/LiveViewEnabled properties until video mode restoration is complete.
+This avoids relying on stale CameraInfo polling. It ignores capture cancellation
+during cleanup, exits on disconnect, and times out after max(15s, exposure*3+5s).
+Timeout aborts before setting read mode/bin/ROI or allowing subsequent autofocus
+movement; reconnect is required if video mode remains active. There is no SDK
+handle, reflection access, mode forcing, or automatic retry.
+
+Fake-device checks cover delayed cleanup, stale CameraInfo, restart, timeout,
+disconnect, native-device mismatch, ASCOM exclusion and the existing QHY gates.
+ToupTek has not been physically connected/captured for this change. The previously
+observed installed toupcam.dll dependency error may still require an SDK/runtime
+installation repair before NINA can discover a camera.
+## Field diagnostics and automatic mask ROI (2026-10-08)
+
+Bahtinov AF first captures a 1024-square scout around the user's approximate chosen
+star (clamped to the sensor). It finds a supported compact core near the selection,
+rejecting isolated hot pixels, recenters candidate squares of 128/192/256/384/512,
+and selects the valid unsaturated three-line ROI with highest measured contrast.
+The stream closes before applying the chosen hardware ROI. The ROI stays fixed for
+the whole autofocus run; missing patterns fail before any motor movement. This is
+validated on synthetic shifted stars, not proof that all physical masks will fit.
+The initial three-frame instability limit remains. The near-focus follow-up below
+adds bounded stationary confirmation when that initial batch is inconsistent.
+
+Private archives are under %LOCALAPPDATA%\NINA\ManualFocuser\FocusDiagnostics.
+Each run gets a timestamped directory. AF saves every frame consumed by the plugin,
+including scout, discarded settling frames, valid samples and failed-measurement
+frames, as unsigned 16-bit FITS before display stretching. Matching JSON stores
+camera/mode/exposure/gain/offset, position, source ROI and phase. measurements.jsonl
+stores analysis, batch spread/limit, automatic ROI choice and failure details.
+Live focus and post-AF monitoring save one frame per five seconds. Frames dropped by
+the latest-frame stream are not archived. No extra camera exposure is issued to save.
+Disk writes are awaited on background work; write failure stops rather than claiming
+an archive exists. Archives remain local and can be copied for offline review.
+
+BahtinovChecks: 93 assertions including automatic center, preserved error geometry,
+blank/cancellation rejection and exact FITS unsigned ADU roundtrip. Clean Release
+build. Physical-mask ROI sizing and the reported field instability still need review
+of recorded field images; the saturation/auto-stretch changes are included too.
+
+## Near-focus field excursion (2026-10-08)
+
+The archived Bahtinov run at position 97438 contained errors +0.260, -0.815,
+and +0.208 px. All three frames had valid high-contrast mask geometry. The old
+whole-range gate stopped on their 1.075 px spread. Replaying all 15 measured raw
+FITS frames reproduces the recorded errors without changing the analyzer.
+
+Stable batches still need only three frames. An inconsistent Bahtinov batch now
+collects four additional frames at the same position. At least five of seven must
+agree within +/-0.5 px around the signed median. Otherwise the run still stops.
+Final focus tolerance remains +/-0.25 px with independent confirmation; invalid
+geometry, changed orientation, saturation, and cancellation retain their guards.
+Archives record every extra consumed frame, the entire range, agreeing-frame
+count/range, and acceptance. This keeps noisy measurements visible for review.
+
+Controlled follow-up tests cover the recorded triplet, opposite polarity, one/two
+outliers, persistent noise, failed geometry, cancellation, and independent runner
+confirmation without movement. The four additional confirming frames in that test
+are synthetic measurements; the observed field archive ended after its third frame.
+BahtinovChecks passes 106 normal checks, or 123 with both field replay options.
+FocusPreviewChecks passes 47, SpikeFocusChecks 29. Release build has no warnings.
+The new seven-frame workflow still needs a physical field retest after restart.
+
+The separate Spike failure archive contains a real connected clipped plateau in
+the central measurement area at 250 ms, gain 26 (peak 65534). Replay confirms the
+saturation guard is appropriate for that frame. Reduce exposure for that star;
+do not interpret a clipped core as a valid stellar-width minimum. No camera or
+focuser was operated during these offline checks.
+
+## Spike automatic exposure recovery (2026-10-08)
+
+Spike AF now handles connected central clipping by reducing exposure to one quarter
+and rechecking while stationary. It waits for the existing stream cleanup before
+changing its capture settings. Exposure cannot go below max(1 ms, camera minimum),
+with at most eight reductions. The shared exposure control shows the actual value;
+gain and read mode are not changed. Still-clipped frames at that limit require a
+lower gain or dimmer star rather than claiming a valid width measurement.
+
+Clipping during a scan invalidates all previous widths and tracking state. At the
+new exposure the current position must first yield valid spike geometry before
+returning to the original origin and rebuilding the scan inside its original motor
+bounds. This prevents comparison of widths from different exposures. The same
+direction of final approach and independent final width verification are retained.
+Ordinary camera failures, invalid geometry, and Stop do not trigger exposure retries.
+Monitoring never reports widths from a clipped frame or issues additional motor moves.
+
+All consumed frames and adjustments remain in the diagnostics archive, including
+exposure, position and scan-reset events. Offline tests cover startup/mid-scan
+clipping, exposure-dependent widths, minimum/retry limits, invalid spikes, failed
+cleanup, delayed cleanup, cancellation, and an unreached restart target. These are
+fake-device/metric checks, not a physical auto-exposure field result.
+SpikeFocusChecks: 51 passed, including 22 automatic exposure checks.
+FocusStreamChecks: 55 passed. Release build: zero warnings/errors.
+
+## Visible parallel spikes rejected by AF (2026-10-08)
+
+The next field run successfully changed 250 ms to 62.5 ms, then stopped on
+"Clear diffraction spikes were not detected". The saved 000004 raw FITS contains
+visible parallel diffraction lines. Its original central-ray estimate was 159.70
+degrees, dominated by the bright stellar core rather than the outer pattern.
+Display auto stretch was already active; applying that nonlinear stretch to width
+measurements would change the metric and does not recover saturated information.
+
+Single-star Spike AF now retains an internal window of at least 128 pixels where
+the capture permits, excludes the estimated core footprint from angle estimation,
+and searches parallel offsets up to 16 pixels. The directional score requires
+signal on both sides. Its detection gate tests a consistent offset through three
+radial bands on each side, with farther background strips to avoid sampling the
+other split line. Band significance uses an engineering estimate of median
+uncertainty, counting unique pixels; the 2x-background and five-sigma checks remain.
+The multi-star/offline metric defaults retain the original path.
+
+The actual archived raw frame now detects an 86.18-degree axis and valid 13.51 px
+width. This proves recovery of detection for that frame, not autofocus convergence
+on the telescope. Tests cover rotated narrow/split patterns, raw pixel preservation,
+circular/elliptical cores, one-sided artifacts and noise. SpikeFocusChecks: 84 with
+the optional field replay; SpikeChecks: 31. Clean Release build. Future archives
+also include angle strength and per-star profile geometry, including failed frames.
+
+The autofocus dropdown now lists Bahtinov, Spike, Linear AF (HFR), in that order.
+
+## Automatic Spike acquisition ROI (2026-10-08)
+
+Spike AF now uses the same 1024-square scout/restart flow as Bahtinov AF. Shared
+supported-core detection locates the star near the user's approximate selection,
+ignoring isolated hot pixels. It uses the actual selected sensor position even
+when a sensor-edge scout is clamped. No valid core means no focuser movement.
+
+Supported outer light out to 192 pixels determines a 256/384/512-square window,
+with 24 pixels of margin. At image edges a smaller centered window may be used;
+the crop is never shifted off the star just to fit. If no centered window fits,
+selection fails. Outer extent is a sizing estimate, not a claim of valid spikes:
+fresh final-ROI frames must still pass the existing geometry/saturation preflight.
+
+The scout stream closes and native cleanup completes before the hardware ROI is
+applied. Camera identity and cancellation are rechecked. The shared UI receives
+the final aligned sensor rectangle. The ROI stays fixed through the scan and any
+automatic exposure recovery. Scouts, center/background/noise, supported radius,
+preferred size, selected crop and final aligned sensor ROI are saved locally.
+
+SpikeFocusChecks: 100 with the existing raw field replay, including actual-star
+centering and retained usable geometry after the automatic crop. Synthetic checks
+cover adaptive sizes, hot pixels, clipped scout, blank/nonfinite input, Stop, and
+sensor edges. BahtinovChecks: 106 after sharing the core locator. No camera or
+focuser was operated in these offline checks; hardware ROI transitions need a
+field retest after restart.
+
+## Plate-solve focus-star centering (2026-10-08)
+
+The focus-star GOTO button now slews, captures full sensor images using the active
+NINA Plate Solving configuration, and calls NINA's public CenteringSolver to
+correct/re-solve the selected coordinates. The configured tolerance is in
+arcminutes; final status/log records the independent image residual in arcseconds.
+The host correction loop is bounded to ten iterations. NoSync, blind fallback,
+binning, gain, solve exposure and retries follow the profile; filter/offset are
+kept. Focusing exposure/ROI are independent. Dome services use the same exported
+dependencies as NINA's Center sequence item, including initial dome sync.
+
+Camera reservation spans slew, solving and corrections. The guarded capture
+solver checks cancellation and device state before/after each host capture-solve
+call, preventing a newly canceled/disconnected result from causing sync/reslew.
+Old field images/measurements are invalidated before movement. Live capture,
+focus movement and ROI changes are locked until cleanup. All exits release an
+acquired reservation; failure to acquire one never releases another owner's.
+Successful final image verification resets the shared focus ROI to 50%/50%.
+
+FocusCenteringChecks: 75 passing offline checks, including the actual NINA
+CenteringSolver with deterministic pointing offset and the plugin VM lifecycle.
+Release build has zero warnings/errors. No mount/camera was operated; physical
+centering needs a field test after restart. Remove the Bahtinov mask for solving.
+The latest saved QHY600 profile has ASTAP installed, a 2 s solve exposure and
+1 arcminute tolerance. Its solve retry delay is 2 minutes, so failed solves can
+wait noticeably; Stop GOTO is available throughout. Profile values were read,
+not changed.
+
+## Near-focus Spike measurement instability (2026-10-08)
+
+Actual run `20261008-032235...5984` failed at 03:25 during refinement at position
+99,348, before final verification: widths 7.55, 8.20, 10.25 px had a 2.70 px
+spread versus the 1.64 px limit. The raw archive `20261007-182323-468Z-SpikeAF-89e75e07`
+reproduces these values. Strongest-axis estimates switched between approximately
+86 and 176 degrees throughout the scan, so different physical widths were mixed.
+
+Spike AF now acquires a valid axis once and retains it through movements,
+exposure/tracking restarts and monitoring. The multi-star/manual analyzer is
+unchanged. The same diffraction geometry and SNR gates run on the locked axis.
+All 18 archived unsaturated measurement frames retain valid geometry with this
+change; however the failing position's fixed-axis widths still vary (8.22, 10.17,
+11.04 px). Axis locking alone is not evidence of convergence.
+
+An unstable three-frame width batch now collects four further stationary frames,
+without stream restart or motor movement. Five of seven must agree around the
+median within the original max(0.25 px, 20%-median) width tolerance. All raw
+values, overall/inlier spread, count and the locked angle are saved. Invalid
+geometry, persistent spread, cancellation and the existing independent final
+minimum check still stop the run; no false success/focuser return is introduced.
+
+SpikeFocusChecks: 142 with this raw-session replay, including exact failure
+reproduction, fixed axis/lost-line checks, stationary outlier handling, persistent
+instability, cancellation and adaptive convergence with an outlier at every
+position. Real additional frames/convergence cannot be tested from an archive
+that stopped after three frames. No connected equipment was operated for checks.
+
+## Autofocus graph position axis (2026-10-08)
+
+Bahtinov/Spike AF preview plots now place each frame at its measured focuser
+position, with integer X-axis labels and metric-versus-position scatter points.
+Repeated frames at one position remain visible as vertical variation. Points
+are not connected in acquisition order, which would zigzag during a reversing
+search. Ordinary Live focus retains its elapsed-seconds line graph; Linear AF
+already uses the position-based main chart. The graph clear button is labeled
+Clear graph for both modes. Release build verifies compiled XAML; visual layout
+in the running NINA session needs a restart to load the updated DLL.
+
+## Wide defocused Spike acquisition (2026-10-08)
+
+Actual run `20261008-034156...10920` failed before any focuser movement, at
+position 114,348. After automatic 250→62.5 ms recovery, the saved frame
+`20261007-184239-732Z-SpikeAF-e800a252/000008.fits` had a valid raw width but failed
+diffraction geometry. HFR seeded a 60 px stellar footprint at its bright rim;
+the fixed 17 px tracking window stayed near (259.26,236.08), away from the full
+stellar centroid. The prior acquired axis also remained locked after discarding
+the high-exposure curve.
+
+AF now opts into a seed-footprint centroid window (at least 2*BaseSize+1, up to
+121 px with existing seed limits). After refinement, the internal crop is
+re-extracted around that centroid, with fractional offsets preserved. If the
+recentered crop cannot fit, that frame fails rather than using a clipped band.
+Other analyzer callers retain the existing defaults. No geometry, SNR or
+saturation thresholds were relaxed. The same raw failed frame now yields center
+(266.38,245.58), axis 86.60 degrees and a valid 25.84 px width. Pure ring/noise
+frames still fail the diffraction gates.
+
+Exposure recovery explicitly clears axis acquisition only while discarding all
+old curve samples. Tracking-only resets and ordinary focuser movement retain the
+current scan's axis. This supersedes the earlier rule retaining an axis across a
+whole-curve exposure restart. The current filter/ROI and motor bounds are unchanged.
+
+SpikeFocusChecks: 139 with the defocused raw replay, 156 with the earlier near-focus
+session replay. Checks cover rotated defocused rings with/without real bilateral
+lines, rim-seeded centroid/crop recovery, per-scan axis acquisition, cancellation,
+noise and adaptive focus. SpikeChecks: 31. Release build: zero warnings/errors.
+No physical equipment was operated; raw-image classification recovery is verified,
+while through-focus convergence from the new starting position needs a field test.
+
+## Split-spike background reference and initial mode (2026-10-08)
+
+The next two field runs at 114,348 still stopped at diffraction detection after
+250 to 62.5 ms exposure recovery. The loaded DLL matched the centroid fix, so
+this was a second detection issue rather than an outdated installation. Archived
+`20261007-185711-246Z-SpikeAF-f46435cd/000006.fits` and
+`20261007-185420-168Z-SpikeAF-f2cc45dd/000006.fits` show split diffraction lines
+around 12 to 13 px from the axis. Fixed background strips 24 px from a candidate
+line sampled the opposite line and its wings. The outer radial bands then failed
+the existing five-sigma requirement.
+
+Parallel-spike detection now spaces background strips at
+`max(24, 2*abs(lineOffset)+16)` px, beyond the opposing line and its wings. The
+same six bilateral radial bands, factor-of-two contrast and five-sigma thresholds
+remain required. Both failed images now acquire a valid axis and raw FWHM
+(26.30 and 25.63 px with a fresh seed). Existing narrow-line checks are retained;
+rotated wide split patterns, pure rings, circular/elliptical stars, one-sided
+artifacts and noise are checked offline. Whole-run motor convergence still needs
+a new field run; the archive contains no successful through-focus sequence.
+
+The panel now opens in Auto focus with Spike selected. Selection alone never
+starts an operation or moves hardware.
+
+Release build: zero warnings/errors. SpikeFocusChecks: 158 with the two recent
+failure frames, 174 with the earlier near-focus session, 157 with the older
+defocused-frame replay. SpikeChecks: 31. Installed and staging DLLs were copied
+with NINA closed and verified against the Release SHA-256. No hardware was
+operated during verification.
+
+## Shrinking footprint during Spike AF (2026-10-08)
+
+The next run, `20261007-190623-291Z-SpikeAF-cb443e94`, moved toward focus:
+width decreased from about 29 to 16 to 11.48 px. Detection then failed at
+position 101,848 before a minimum was bracketed. This was not a final-confirmation
+failure. The acquisition footprint stayed at 60 px, so the evidence gate kept
+inspecting radial bands from 60 to 103 px after the current HFR footprint had
+shrunk to 25 px. Real nearer diffraction light was excluded.
+
+AF now derives the evidence footprint from the current local HFR, capped at the
+acquisition footprint. Its radial evidence range follows that footprint, using
+the same minimum 128 px evidence aperture and existing six-band contrast/SNR
+requirements. Only diffraction validation changes: the acquisition crop,
+centroid window, width-profile aperture, motor bounds and per-scan axis remain
+fixed. Current/acquisition footprints are written into frame diagnostics.
+
+Offline sequential replay of all 23 analyzed raw frames reproduces the old
+failure and validates all frames with the new evidence aperture. Every width
+and used angle matches the old computation exactly, including 11.477310714 px
+at the failed position. The clipped 24th measurement frame is excluded using
+the production saturation check, as in the original run. Negative tests cover
+small circular and elliptical stars with a retained large acquisition crop.
+SpikeFocusChecks: 228 with this run, 180 with the earlier near-focus run.
+SpikeChecks: 31. Release build: zero warnings/errors. The archive ends at the
+first failed measurement; a successful bounded minimum and final motor-position
+verification still require a new field run. Hardware was not operated by tests.
+
+## Noise-aware initial travel for both AF methods (2026-10-08)
+
+Live focus's manual In/Out step (e.g. 600) is separate from NINA's profile AF step
+size (2500 in the field run). Neither value is overwritten. Both AF methods now
+receive stationary-batch uncertainty from the application. Robust MAD of accepted
+frames estimates uncertainty of the median, with a 0.05 px floor. Two measurements
+need a difference exceeding twice their combined uncertainty to establish a
+usable slope or coarse minimum bracket.
+
+Spike probes both directions and doubles travel when the initial difference is
+too small. Minimum bracketing skips indistinguishable neighboring samples until
+both sides show a supported increase, then uses the existing safeguarded fine
+search. Bahtinov uses the widest pair with a supported error change for secant
+prediction; without one it makes larger bounded calibration probes. Prediction
+travel scales with the calibrated span rather than always capping at twice the
+initial step. All movement stays within the original AF step * offset bounds;
+noise-only data cannot create a valid slope or coarse width bracket. Existing
+mask-zero and final Spike-width verification requirements remain enforced.
+
+Diagnostics include batch uncertainty and actual requested moves; the global
+status displays the current step and target position. The latest Bahtinov run
+`20261007-191546-770Z-BahtinovAF-80726aa0` stopped after a 2500-step move because
+only 4/7 frames agreed within 1 px. Step calibration does not convert this
+unstable batch into a valid measurement, and that run cannot prove convergence.
+
+Offline checks cover 600/2500 initial steps, weak changes, a first probe with the
+wrong apparent direction, bounded noise-only failure, invalid uncertainty,
+cancellation and independent final verification. No connected hardware was
+operated. Field effectiveness of the calibrated steps still needs a new run.
+
+Release build: zero warnings/errors. SpikeFocusChecks: 239 with archived
+convergence replay (169 algorithm/geometry checks plus the 70 field checks).
+BahtinovChecks: 112. Updates are staged when NINA is running and require a
+restart to load; the staged DLL hash is checked against the Release artifact.
+
+## Continuous Live focus during manual movement (2026-10-08)
+
+Live focus's In/Out previously disposed the stream, awaited motor movement and
+opened another stream. QHY mode transitions added several seconds to each side
+of every move. These manual moves now retain the existing camera reader and
+run the independent focuser mediator task while previews continue to render.
+Exposure, ROI, gain and readout settings remain fixed for the stream; no second
+camera reader or SDK call path is introduced. The status and archived images
+mark movement frames. In/Out remains locked until the active move completes.
+Single-exposure fallback still waits for movement before the next capture.
+
+Stop or a preview error cancels the shared token, awaits native stream cleanup
+and the motor task, then releases camera reservation/UI ownership. Movement
+faults are observed and end preview with cleanup. This supersedes the previous
+blanket close-before-move policy for Live focus's manual In/Out; autofocus still
+uses its own stationary measurement workflow.
+
+The actual dockable VM is tested with strict fake camera/focuser mediators:
+multiple displayed frames during a held motor move, one stream start with no
+intermediate stop, controls restored on the same stream, cancellation, delayed
+camera/motor cleanup retaining ownership, and movement failure. Run:
+`dotnet run --project Tools/FocusCenteringChecks -c Release -- --live-move`.
+No hardware was operated. Native QHY/ToupTek timing must be checked in the field.
+
+Live VM integration: 19 checks. Stream lifecycle: 55 checks. Release build:
+zero warnings/errors. DLL deployment is verified by SHA-256 against the build;
+if NINA is running, the updated DLL is staged for the next startup.
+
+## Live default and explicit shared Auto ROI (2026-10-08)
+
+The panel now opens in Live focus; the separate AF method defaults to Spike.
+Auto ROI is a common button beside Select ROI. It captures one 1024 px scout
+around the shared selected center while holding camera reservation, finds a
+supported star and applies its centered crop to the shared sensor coordinates.
+Bahtinov AF/Live Bahtinov overlay uses the existing mask-line crop selection;
+other modes use the supported star footprint. The crop preview is shown, and
+the existing full-frame mouse editor remains available for correction. Detection,
+cancellation, connection change or reservation rejection leaves the prior ROI
+intact. No motor motion, stream start or autofocus is performed by this button.
+
+Bahtinov/Spike AF startup no longer captures a 1024 px scout or silently applies
+a newly found ROI. Both snapshot the selected width, height and center before
+preflight. Live, manual and Linear AF already use this shared selection. Mode
+switches keep it. Exposure recovery and stationary safety checks remain active.
+This supersedes earlier descriptions of automatic ROI selection at AF startup.
+
+Actual VM integration covers initial mode/method, one-shot button selection,
+sensor-offset mapping, preview and ownership cleanup, mode persistence, AF
+startup ROI without scouts, Live startup, invalid stars/masks, Stop and capture
+reservation rejection. Run
+`dotnet run --project Tools/FocusCenteringChecks -c Release -- --auto-roi`.
+Hardware is not operated by the tests; a field run is still needed for optics.
+
+Explicit ROI VM checks: 49; continuous Live movement checks: 19; focus-star
+centering checks: 75. Release build verifies compiled XAML, with zero warnings
+or errors. Default/mode/ROI behavior is exercised through the actual dockable VM
+with strict mediator fakes; in-host visual layout needs a restart/field check.
+
+## Disabled focus-star GOTO (2026-10-08)
+
+The previous enable condition rejected any connected guider, including idle
+PHD2. GOTO now allows that connection and uses the public guider mediator to
+stop guiding before mount movement, inside the camera reservation/cancel scope.
+PHD2 returns false when already Stopped, Looping or Selected; those confirmed
+idle states are accepted through the public IGuider.State property. Other false
+results abort before slew/capture. Guiding stays stopped for focusing. A new
+NINA guiding operation cancels GOTO; PHD2 resuming during capture is detected
+before the capture result can cause a correction or verified-success report.
+
+Disabled GOTO has a dynamic tooltip, also visible while disabled, explaining
+missing target/camera/mount, Park, slew, focus/live activity or another capture
+owner. Capture ownership changes refresh availability even without connection
+flag changes. Repeated unchanged device polls do not invalidate host commands.
+
+Actual VM/host centering checks: 162; Live movement regression: 19; explicit ROI
+regression: 49. Release/XAML build: zero warnings/errors. No hardware commands
+were sent by this verification; physical GOTO/centering remains a field check.
+
+## NINA-style curve autofocus with streaming (2026-10-08)
+
+All panel AF commands now route through CurveAutofocus. The previous incremental
+Bahtinov/Spike runners and coarse/fine Linear stopping logic are no longer used
+by the panel. The three method choices and default Live mode/Spike method remain.
+The initial scan spans ±NINA initial-offset count at its fixed AF step interval.
+Insufficient side coverage adds positions at that same interval; it never doubles
+the step. Maximum points: min(60, offsets × 10). Motor MaxStep/zero, camera/focuser
+identity and NINA AF timeout guard the run. No automatic ROI selection is added.
+
+Frames/position uses NINA's frame-count setting, clamped 5–50 for statistical
+measurement (the UI replaces Single pass). Valid/inlier coverage must be at
+least max(3, ceil(0.6 × frames)). Frame medians are MAD filtered, with a noise
+floor; fitting uncertainty combines robust frame scatter and detector star
+scatter/count, divided by inlier count. Box plots retain valid-frame quartiles,
+Tukey whiskers/outliers and a median. Fitting uses the robust median/uncertainty.
+
+Linear calls the selected IStarDetection behavior once per frame. It pins that
+behavior and image-analysis settings for the run. Private BaseImageData is rendered
+and auto-stretched using NINA APIs; source bit depth/Bayer state are retained.
+HFR, HFRStdDev and star count come from the behavior, so a selected Hocus Focus
+detector supplies those measurements. Metadata includes current filter, pixel
+size/focal length, bin 1, gain/offset, acquisition position and exposure. This is
+needed for Hocus Focus per-filter settings. Results and subtype star lists are
+never mutated; UpdateAnalysis/SetImage are never called for derived AF values.
+
+HFR/Spike fitting uses NINA QuadraticFitting, HyperbolicFitting, TrendlineFitting
+or combined methods selected in the profile. Position coordinates are centered
+before calling those host classes. NINA's R² threshold, bracketing, positive
+curvature/noise-supported wings and independent final measurement gate success.
+Bahtinov fits signed error linearly and finds its zero crossing; verification
+requires abs(median error) + 2 × uncertainty ≤0.5 px. HFR/Spike verification must
+be no worse than the sampled best plus max(15%, combined 3-sigma uncertainty).
+
+One camera stream remains open across moves. Producer-side monotonic request/
+availability timestamps gate the first accepted post-settle frame: its request
+must start after settle and its arrival must be at least exposure + one measured
+frame interval later. In-flight/buffered frames are discarded, not analyzed.
+One queued raw frame bounds capture/analysis backpressure. Detector/tracking
+analysis is serial, but overlaps camera acquisition and next-point movement.
+ScanAsync returns only after outstanding CPU/motor work finishes, including
+Stop or fault. The camera reservation is released after stream disposal. Without
+stream support, the same statistics/scan use individual settled exposures.
+
+Saturation reduces exposure by quarters (up to eight reductions / camera min),
+drains work, stops the stream and restarts the entire curve; mixed-exposure fit
+points are not retained. Raw FITS/JSON frames still go to FocusDiagnostics.
+After verification the panel keeps preview running until Stop, without altering
+the curve statistics. The AF timeout is disabled for that verified preview.
+The sequencer's Linear request returns after verification/cleanup instead of
+waiting for an interactive preview Stop.
+
+The AF plot now has frame-distribution boxes, a yellow fitting curve and a
+separate yellow final-verification box. Padding prevents boundary boxes from
+being clipped. A synthetic chart export is available at bin/curve-af-chart.png;
+it was visually checked, and is not a hardware field result.
+
+Offline curve checks: 543 (host fitting/statistics, bounded pipeline, analysis
+overlap, real dockable VM through a fake pluggable detector, continuous stream
+across moves, moving-frame exclusion, failure/Stop cleanup, independent bad
+verification rejection and single-frame fallback). Stream regression: 55.
+Device operations in these tests are strict fakes; physical speed/accuracy and
+the complete NINA panel layout still need a field run after restart.
+### Graph focus positioning
+
+Manual and AF focuser-position charts accept a click or horizontal drag on the
+X-axis, issuing one absolute move on release. Cyan is current position; yellow
+is the target preview. Escape/capture loss/view changes cancel before movement.
+Plot-body interactions retain box trackers. Screen-to-position mapping follows
+the rendered axis, including zoom and resize; pointer travel is clamped to the
+visible plot width and public focuser travel limit.
+
+Graph movement is blocked during scanning/verification, GOTO, existing motor
+travel, disconnected devices and another camera operation. AF monitoring allows
+manual graph moves with the original stream open. The old verification becomes
+historical; no new moving frames are mixed into the curve. Stop cancels the motor
+and waits for native cleanup before releasing the camera reservation.
+
+Offline coverage: `FocusCenteringChecks --graph` checks coordinate transforms,
+limits, busy/device gates, absolute movement, second-command rejection and Halt
+cleanup. `--curve` exercises completed/canceled graph movement during the actual
+VM's AF monitoring loop with fake camera/focuser mediators, including continuing
+preview and single-stream ownership. `bin/graph-focus-control.png` is a synthetic
+chart preview, not a running NINA screenshot. Physical focuser interaction and
+host mouse gestures remain field-test items; no NINA or device was started.
+
+### Native ZWO ASI streaming
+
+Installed NINA 3.2.0.9001 ASICamera has CanShowLiveView=false but implements
+StartLiveView / DownloadLiveView / StopLiveView using RAW16 video capture.
+Native IDs use the ZWOptical_ driver category, including model and camera alias.
+FocusCameraSupport now centralizes stream capability and ROI alignment policy:
+ASI and ToupTek driver families are enabled across their models; normal drivers
+follow CanShowLiveView, including future QHY drivers that explicitly advertise it.
+The reviewed QHY600M override and 3x3-bin exclusion remain intact. Unsupported
+ASCOM paths are not enabled from camera display names.
+
+ASI stream start validates the current public ICamera identity/connection before
+calling the mediator. Streaming, single capture and mouse selection share width
+alignment of 8 pixels and height alignment of 2 pixels. Raw values, bit depth,
+Bayer metadata and current gain/offset pass through the existing common pipeline.
+Camera ownership, focuser-motion overlap and stream cleanup remain common to all
+three AF methods and Live focus. No private SDK access or extra camera handle.
+
+The installed ASI DownloadLiveView invokes GetVideoData with wait=-1 and does not
+observe CancellationToken inside the native read. Stop therefore waits for the
+in-flight read to return before host StopLiveView/settings restoration. A stalled
+SDK can leave cleanup waiting; capture ownership stays reserved and no second
+capture is started. This behavior has not been tested on physical ASI hardware.
+
+FocusStreamChecks: 79 offline checks passed, including ASI model/alias recognition,
+ASCOM/capability gates, identity changes, rectangular edge ROI, color metadata,
+repeat start/stop and delayed-download cleanup. Existing QHY/ToupTek cases passed.
+FocusCenteringChecks --auto-roi: 55 passed. --live-move: 19 passed with the generic
+driver, and --live-move --asi: 19 passed with the native ASI category and disabled
+LiveView capability. The latter exercises continued preview during focuser travel,
+motor errors, Stop cleanup ordering and camera disconnection through the actual VM.
+No NINA or physical device was started.
+
+### Plugin autofocus curve overrides
+
+Options > Manual Focuser now provides independent HFR and Spike curve selectors.
+HfrCurveFit defaults to Hyperbolic (symmetric); SpikeCurveFit defaults to Parabolic.
+Available alternatives are Parabolic, symmetric Hyperbolic, trend lines and their
+combined models. Bahtinov displays the fixed Linear (zero crossing) signed-error
+model. Settings.Settings, Settings.Designer.cs and app.config contain matching
+user-scoped string settings and defaults. Invalid saved width-model strings fall
+back to the respective recommended default.
+
+RunCurveAutofocusAsync snapshots the plugin model once at startup and passes it
+to FocusScanFit. It no longer reads/writes AutoFocusCurveFitting from the host
+profile. The chosen model/source are recorded in diagnostics; actual fitting still
+uses the existing NINA implementations. Scan step, offsets, frame count and R²
+threshold retain their NINA sources. Changing options during a run applies next time.
+
+Offline --curve passed 895 assertions including default/override resolution, all
+five fit models, actual VM execution without a host curve-model property and model
+pinning across an option change during detection. --fit-options passed 6 checks
+using the actual plugin option bindings/setters, independent selection and settings
+reload. bin/curve-fit-options.png is an offscreen render of the new options block,
+not a running host screenshot. No NINA or physical hardware was started.
+
+## Preview angle and display stretch (2026-10-08)
+
+The angle label formerly read only the manual-exposure model, so Live and the
+new Spike curve AF could detect diffraction without updating it. Both now
+publish private detector results to the UI, with finite-angle/clear-spike gates.
+Live and post-AF Spike monitoring analyze at most about once per second using
+a central window of at most 1024 pixels; AF measurement frames publish their
+own results. Invalid results, new runs and ROI changes invalidate old angles.
+Use angle reads the displayed result; confidence moved into its tooltip.
+
+An image-local footer offers a 0.25–2.5 display stretch slider and reset to 1.
+FocusDisplayStretch retains automatic black/white normalization and scales the
+target midtone background. Raw buffers and metric paths are not modified. Frozen
+preview images retain raw pixels through weak keys, with no frame history. Idle
+and ROI overview adjustments debounce for 80 ms and serialize display rerenders;
+reference guards prevent replacing newer camera frames/ROI selections. Active
+frames use the new strength without camera/motor restart. The controls sit outside
+PreviewSurface, so its ROI mouse mapping excludes the footer.
+
+Offline --preview-display passed 14 checks for angle detection/invalidation,
+raw preservation, monotonic brightness, idle/full-frame rerender and actual footer
+bindings/layout. bin/preview-stretch-240.png and -420.png are offscreen renders
+of the real XAML preview section with synthetic pixels. Physical NINA UI and
+camera verification were not performed.
+
+## Commit validation (2026-10-08)
+
+All eight offline check projects built in Release with zero warnings/errors and
+DeployPlugin=false. The following runs passed 1,661 assertions in total:
+
+| Project / run | Assertions |
+| --- | ---: |
+| FocusCenteringChecks (default) | 162 |
+| FocusCenteringChecks --curve | 895 |
+| FocusCenteringChecks --graph | 20 |
+| FocusCenteringChecks --auto-roi | 55 |
+| FocusCenteringChecks --live-move | 20 |
+| FocusCenteringChecks --live-move --asi | 20 |
+| FocusCenteringChecks --fit-options | 6 |
+| FocusCenteringChecks --preview-display | 14 |
+| FocusStreamChecks | 79 |
+| FocusPreviewChecks | 47 |
+| BahtinovChecks | 112 |
+| SpikeFocusChecks | 169 |
+| SpikeChecks | 31 |
+| FocusChecks | 11 |
+| RoiInteractionChecks | 20 |
+
+Run each project with `dotnet run --project Tools/<project> -c Release
+-p:DeployPlugin=false -- <optional arguments>`. These are fake-mediator,
+synthetic-image and offline checks; they do not operate physical equipment.
+Build logs, generated previews and raw diagnostic frames are excluded from Git.

@@ -5,11 +5,12 @@ using System.Threading;
 using System.Threading.Tasks;
 namespace Cwseo.NINA.ManualFocuser.Models {
     public static class BahtinovFocusRunner {
-        public static async Task<(int Position, double Error)> RunAsync(int origin, int step, int offsets, Func<int, CancellationToken, Task<int>> move, Func<int, CancellationToken, Task<double>> measure, CancellationToken token) {
+        public static async Task<(int Position, double Error)> RunAsync(int origin, int step, int offsets, Func<int, CancellationToken, Task<int>> move, Func<int, CancellationToken, Task<double>> measure, CancellationToken token,Func<double> measurementUncertainty=null) {
             if (step < 1 || step > 10000 || offsets < 1 || offsets > 12 || origin < (long)step * offsets || origin + (long)step * offsets > int.MaxValue)
                 throw new ArgumentException("Invalid bounded scan range.");
             int lower = origin - step * offsets, upper = origin + step * offsets;
             var samples = new SortedDictionary<int, double>();
+            var uncertainties = new Dictionary<int,double>();
             async Task Move(int p) {
                 token.ThrowIfCancellationRequested();
                 if (p < lower || p > upper || await move(p, token) != p)
@@ -22,6 +23,9 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 token.ThrowIfCancellationRequested();
                 if (!double.IsFinite(e))
                     throw new InvalidOperationException("Invalid mask measurement. No further moves.");
+                double uncertainty=measurementUncertainty?.Invoke() ?? 0;
+                FocusMeasurementNoise.DifferenceThreshold(uncertainty,0);
+                uncertainties[p]=uncertainty;
                 return e;
             }
             samples[origin] = await Read(origin);
@@ -67,13 +71,27 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     break;
                 }
                 if (next < 0) {
-                    var previous = ordered.Where(p => p.Key != current).OrderBy(p => Math.Abs((long)p.Key - current)).First();
-                    double slope = (samples[current] - previous.Value) / ((long)current - previous.Key);
-                    if (!double.IsFinite(slope) || Math.Abs(slope) < 1e-12)
-                        throw new InvalidOperationException("No reliable mask slope. No further moves.");
-                    // Unbracketed secant travel is capped at twice the initial step.
-                    double delta = Math.Clamp(-samples[current] / slope, -2.0 * step, 2.0 * step);
-                    next = (int)Math.Clamp(Math.Round(current + delta), lower, upper);
+                    // Use the widest pair with a change above stationary measurement
+                    // noise, rather than extrapolating from a nearly identical neighbor.
+                    long span=0; double slope=double.NaN;
+                    for(int i=0;i<ordered.Length;i++) for(int j=i+1;j<ordered.Length;j++) {
+                        var a=ordered[i]; var b=ordered[j];
+                        long distance=(long)b.Key-a.Key;
+                        if(distance>span && Math.Abs(b.Value-a.Value)>
+                            FocusMeasurementNoise.DifferenceThreshold(uncertainties[a.Key],uncertainties[b.Key])) {
+                            span=distance; slope=(b.Value-a.Value)/distance;
+                        }
+                    }
+                    if(!double.IsFinite(slope) || Math.Abs(slope)<1e-12) {
+                        long probeSpan=Math.Min(2*ordered.Max(p=>Math.Abs((long)p.Key-origin)),(long)step*offsets);
+                        int right=(int)Math.Clamp(origin+probeSpan,lower,upper),left=(int)Math.Clamp(origin-probeSpan,lower,upper);
+                        next=!samples.ContainsKey(right)?right:!samples.ContainsKey(left)?left:-1;
+                        if(next<0) throw new InvalidOperationException("Mask error changes remain below measurement noise in the bounded range. Increase AF step size or improve the measurement.");
+                    } else {
+                        double travelLimit=2.0*Math.Max(step,span);
+                        double delta=Math.Clamp(-samples[current]/slope,-travelLimit,travelLimit);
+                        next=(int)Math.Clamp(Math.Round(current+delta),lower,upper);
+                    }
                 }
                 if (samples.ContainsKey(next))
                     throw new InvalidOperationException("No verified zero in the bounded range.");

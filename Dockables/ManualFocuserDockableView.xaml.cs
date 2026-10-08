@@ -26,6 +26,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             LayoutRoot.SizeChanged += (_, _) => ControlsScrollViewer.MaxHeight = Math.Max(64, LayoutRoot.ActualHeight - 160);
             Loaded += OnLoaded;
             DataContextChanged += OnDataContextChanged;
+            Unloaded += (_,_) => CancelGraphDrag();
         }
         private async void OnLoaded(object sender, RoutedEventArgs e) {
             if (DataContext is ManualFocuserDockableVM vm) await vm.EnsureFocusTargetsLoadedAsync();
@@ -110,6 +111,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
         private void OnPreviewSizeChanged(object sender, SizeChangedEventArgs e) => DrawRoiOutline();
         private void OnRoiPropertyChanged(object sender, PropertyChangedEventArgs e) {
+            if(graphDragVm!=null && !graphDragVm.CanMoveFromGraph) CancelGraphDrag();
             if (e.PropertyName is "PreviewRoiRectangle" or "IsSelectingRoi" or "LiveDisplayImage") DrawRoiOutline();
         }
         private void DrawRoiOutline() {
@@ -148,6 +150,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 }
         }
         private async void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) {
+            CancelGraphDrag();
             if (e.OldValue is ManualFocuserDockableVM old) PropertyChangedEventManager.RemoveHandler(old, OnRoiPropertyChanged, string.Empty);
             if (e.NewValue is ManualFocuserDockableVM current) PropertyChangedEventManager.AddHandler(current, OnRoiPropertyChanged, string.Empty);
             DrawRoiOutline();

@@ -52,6 +52,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // spikeAngleDeg. The orientation is always measured and reported; this
         // only controls whether the metric acts on it.
         public bool autoSpikeAngle { get; set; } = false;
+        // Single-star AF must retain the outer diffraction pattern even when the
+        // stellar core is small. Parallel/split lines need an offset-aware search.
+        public int minimumRoiSizePx { get; set; }
+        public bool resolveParallelSpikes { get; set; }
 
         // Peak-over-mean a directional profile must reach before it counts as a
         // spike rather than noise.
@@ -107,6 +111,10 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // Tracking / centroid refinement
         public bool enableCentroidTracking { get; set; } = true;
         public int centroidWindowPx { get; set; } = 17;        // odd recommended
+        public bool adaptiveCentroidWindow { get; set; }
+        // AF-only current footprint for diffraction evidence. NaN preserves the
+        // acquisition footprint; this never changes the width/profile aperture.
+        public double parallelSpikeCoreRadiusPx { get; set; } = double.NaN;
         public double centroidThreshK { get; set; } = 3.0;     // threshold = median + k*MAD
         public double maxCentroidShiftPx { get; set; } = 30.0; // clamp per frame
 
@@ -332,11 +340,24 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 double cxOff = 0, cyOff = 0;
                 if (param.enableCentroidTracking) {
-                    if (TryRefineCentroid(roi, roiSize, param, out double dx, out double dy)) {
+                    if (TryRefineCentroid(roi, roiSize, param, out double dx, out double dy,
+                        param.adaptiveCentroidWindow ? 2 * t.BaseSizePx + 1 : 0)) {
                         cxOff = dx;
                         cyOff = dy;
                         t.X = roiCenterX + dx;
                         t.Y = roiCenterY + dy;
+                        if (param.adaptiveCentroidWindow) {
+                            // Recenter the analysis crop after finding the complete
+                            // defocused footprint. Leaving the crop on the bright
+                            // rim makes one outer band run outside its edge.
+                            if (!TryExtractROIAt(data,width,height,t.X,t.Y,t.BaseSizePx,param,
+                                out roi,out roiSize,out roiCenterX,out roiCenterY)) {
+                                t.MissCount++;
+                                continue;
+                            }
+                            RemoveBackground(roi,roiSize,param);
+                            cxOff=t.X-roiCenterX; cyOff=t.Y-roiCenterY;
+                        }
                         t.LastSeenFrameIndex = state.FrameIndex;
                         t.MissCount = 0;
                     } else {
@@ -351,13 +372,14 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
                 double rOuter = roiSize / 2.0 - 2.0;
                 double rInner = Math.Max(Math.Max(6.0, param.coreRejectSigmaPx), roiSize * 0.15);
+                if (param.resolveParallelSpikes) rInner = Math.Max(rInner, t.BaseSizePx);
                 if (rOuter > rInner + 4) {
                     item.AngleDeg = EstimateAngleDeg(
                         roi, roiSize,
                         roiSize / 2.0 + cxOff, roiSize / 2.0 + cyOff,
                         rInner, rOuter,
                         state.LastAngleDeg,
-                        out double strength);
+                        out double strength, param.resolveParallelSpikes ? Math.Min(16,roiSize/8) : 0);
                     item.AngleStrength = strength;
                 }
 
@@ -410,7 +432,13 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                     AngleDeg = w.AngleDeg,
                     BoxSizePx = Math.Clamp((int)Math.Round(w.Star.BaseSizePx * 2.0), 12, 120)
                 };
-                point.HasClearSpike = HasExtendedSpike(w.Roi, w.Size, usedAngle, w.OffX, w.OffY);
+                double evidenceCore = double.IsFinite(param.parallelSpikeCoreRadiusPx)
+                    ? Math.Min(w.Star.BaseSizePx,Math.Clamp(param.parallelSpikeCoreRadiusPx,6,60)) : w.Star.BaseSizePx;
+                double evidenceOuter = double.IsFinite(param.parallelSpikeCoreRadiusPx)
+                    ? Math.Max(128,4*evidenceCore)*.43 : double.PositiveInfinity;
+                point.HasClearSpike = param.resolveParallelSpikes
+                    ? w.AngleStrength >= param.angleMinStrength && HasParallelExtendedSpike(w.Roi,w.Size,usedAngle,w.OffX,w.OffY,evidenceCore,evidenceOuter)
+                    : HasExtendedSpike(w.Roi, w.Size, usedAngle, w.OffX, w.OffY);
 
                 // The profile terms are computed for every kind, not just the selected
                 // one: they cost one pass and they are what makes a bad frame
@@ -516,31 +544,55 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             return false;
         }
 
-        private static bool HasSpikeInBands(float[] roi, int size, double angleDeg, double offX, double offY, double inner, double outer) {
+        public static bool HasParallelExtendedSpike(float[] roi,int size,double angleDeg,double offX,double offY,double coreRadius,double maximumOuterRadius=double.PositiveInfinity) {
+            if(roi==null || roi.Length!=(long)size*size || size<32 || !double.IsFinite(angleDeg)) return false;
+            double inner=Math.Max(Math.Clamp(size*.04,10,24),coreRadius), outer=Math.Min(size*.43,maximumOuterRadius);
+            if(outer-inner<12) return false;
+            int limit=Math.Min(16,size/8);
+            for(int offset=-limit;offset<=limit;offset++) {
+                // A defocused line splits around the axis. The opposite line is
+                // roughly 2*offset away; sampling it as background rejects real
+                // diffraction light. Keep both reference strips beyond that line
+                // and its wings, without changing the six-band evidence gate.
+                int backgroundOffset=Math.Max(24,2*Math.Abs(offset)+16);
+                if(HasSpikeInBands(roi,size,angleDeg,offX,offY,inner,outer,offset,backgroundOffset,true)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasSpikeInBands(float[] roi, int size, double angleDeg, double offX, double offY, double inner, double outer, double lineOffset=0,int backgroundOffset=8,bool aggregateEvidence=false) {
             double theta = angleDeg * Math.PI / 180;
             double cs = Math.Cos(theta), sn = Math.Sin(theta);
             for (int side = -1; side <= 1; side += 2) {
                 for (int band = 0; band < 3; band++) {
                     var on = new List<double>(); var background = new List<double>();
+                    var uniqueOn = aggregateEvidence ? new HashSet<int>() : null;
+                    var uniqueBackground = aggregateEvidence ? new HashSet<int>() : null;
                     double start = inner + (outer - inner) * band / 3;
                     double end = inner + (outer - inner) * (band + 1) / 3;
                     for (double r = start; r < end; r += 1) {
                         for (int u = -2; u <= 2; u++) {
-                            foreach (int strip in new[] { 0, -8, 8 }) {
-                                double transverse = u + strip;
+                            foreach (int strip in new[] { 0, -backgroundOffset, backgroundOffset }) {
+                                double transverse = lineOffset + u + strip;
                                 int x = (int)Math.Round(size / 2.0 + offX + side * r * cs - transverse * sn);
                                 int y = (int)Math.Round(size / 2.0 + offY + side * r * sn + transverse * cs);
                                 if (x < 0 || x >= size || y < 0 || y >= size) return false;
                                 double value = roi[y * size + x];
                                 if (!double.IsFinite(value)) return false;
-                                if (strip == 0) on.Add(value); else background.Add(value);
+                                if (strip == 0) { if(uniqueOn==null || uniqueOn.Add(y*size+x))on.Add(value); }
+                                else { if(uniqueBackground==null || uniqueBackground.Add(y*size+x))background.Add(value); }
                             }
                         }
                     }
                     if (on.Count == 0) return false;
                     double signal = Median(on), baseline = Median(background);
                     double noise = 1.4826 * Median(background.Select(v => Math.Abs(v - baseline)).ToList());
-                    if (signal <= 0 || signal < 2 * Math.Max(1, baseline) || signal - baseline < 5 * Math.Max(1, noise)) return false;
+                    // A band median combines many independent pixels. Its uncertainty
+                    // differs from per-pixel noise; duplicates from rotated sampling do
+                    // not count as extra evidence. Require five sigma on all six bands.
+                    double uncertainty = Math.Max(1,noise);
+                    if(aggregateEvidence) uncertainty *= 1.253*Math.Sqrt(1.0/on.Count+1.0/background.Count);
+                    if (signal <= 0 || signal < 2 * Math.Max(1, baseline) || signal - baseline < 5 * uncertainty) return false;
                 }
             }
             return true;
@@ -860,7 +912,7 @@ namespace Cwseo.NINA.ManualFocuser.Models {
             double rInner,
             double rOuter,
             double preferNearDeg,
-            out double strength) {
+            out double strength, int maximumLineOffset = 0) {
 
             strength = 0;
             const int bins = 180;   // one bin per degree
@@ -872,19 +924,23 @@ namespace Cwseo.NINA.ManualFocuser.Models {
                 double a = b * Math.PI / bins;
                 double ca = Math.Cos(a), sa = Math.Sin(a);
 
-                double sum = 0;
-                int n = 0;
-                for (double r = rInner; r <= rOuter; r += 1.0) {
-                    for (int sign = -1; sign <= 1; sign += 2) {
-                        int x = (int)Math.Round(centerX + sign * r * ca);
-                        int y = (int)Math.Round(centerY + sign * r * sa);
-                        if (x < 0 || y < 0 || x >= size || y >= size) continue;
-                        double v = roi[y * size + x];
-                        if (v > 0) sum += v;
-                        n++;
+                double bestLine=0;
+                for(int offset=-maximumLineOffset;offset<=maximumLineOffset;offset++) {
+                    double positive=0,negative=0; int n=0;
+                    for (double r = rInner; r <= rOuter; r += 1.0) {
+                        for (int sign = -1; sign <= 1; sign += 2) {
+                            int x = (int)Math.Round(centerX + sign * r * ca-offset*sa);
+                            int y = (int)Math.Round(centerY + sign * r * sa+offset*ca);
+                            if (x < 0 || y < 0 || x >= size || y >= size) continue;
+                            double v = Math.Max(0,roi[y * size + x]);
+                            if(sign>0)positive+=v;else negative+=v;
+                            n++;
+                        }
                     }
+                    double sum=maximumLineOffset>0 ? 2*Math.Min(positive,negative) : positive+negative;
+                    bestLine=Math.Max(bestLine,n>0?sum/n:0);
                 }
-                profile[b] = n > 0 ? sum / n : 0;
+                profile[b] = bestLine;
             }
 
             var sm = new double[bins];
@@ -995,7 +1051,8 @@ namespace Cwseo.NINA.ManualFocuser.Models {
 
             int hs = (int)Math.Round(baseSizePx * param.roiScale);
             hs = Math.Clamp(hs, (int)Math.Round(baseSizePx * 1.2), (int)Math.Round(baseSizePx * 3.5));
-            hs = Math.Min(hs, Math.Min(width, height) / 6);
+            if(param.minimumRoiSizePx>0) hs=Math.Max(hs,param.minimumRoiSizePx/2);
+            hs = Math.Min(hs, param.minimumRoiSizePx>0 ? Math.Min(width,height)/2-1 : Math.Min(width, height) / 6);
             hs = Math.Max(hs, 12);
 
             if (cx < hs || cy < hs || cx + hs >= width || cy + hs >= height)
@@ -1049,13 +1106,15 @@ namespace Cwseo.NINA.ManualFocuser.Models {
         // ====================================================
         // Centroid refinement
         // ====================================================
-        private static bool TryRefineCentroid(float[] roi, int size, SpikeAnalysisParams param, out double dx, out double dy) {
+        private static bool TryRefineCentroid(float[] roi, int size, SpikeAnalysisParams param, out double dx, out double dy, int minimumWindow = 0) {
             dx = 0;
             dy = 0;
 
             int center = size / 2;   // exact local index of the ROI centre
 
-            int win = Math.Max(5, param.centroidWindowPx);
+            // A defocused donut's brightest pixel can lie on its rim. Include
+            // the seeded stellar footprint instead of tracking a small rim patch.
+            int win = Math.Max(Math.Max(5, param.centroidWindowPx), minimumWindow);
             if (win % 2 == 0) win += 1;
             int half = win / 2;
 
