@@ -25,7 +25,7 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
         }
         public LiveFocusModel(IProfileService profiles, IImagingMediator imaging, ICameraMediator camera)
         {
-            imagingMediator = imaging; cameraMediator = camera;
+            this.profiles = profiles; imagingMediator = imaging; cameraMediator = camera;
         }
         private sealed class NullPreviewProgress : IProgress<ApplicationStatus>
         {
@@ -92,7 +92,7 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
             int cropWidth = Math.Min(size, width), cropHeight = Math.Min(sizeY, height);
             if (retainRawPixels)
             {
-                LastPreviewRawFrame = new FocusRawFrame(raw, width, left, top, cropWidth, cropHeight);
+                LastPreviewRawFrame = new FocusRawFrame(raw, width, left, top, cropWidth, cropHeight, image);
                 LastPreviewTiming = new(captureMs, hostDownloadMs, conversionMs, timer.Elapsed.TotalMilliseconds, width, height);
                 return (null, cropWidth, cropHeight, hardwareRoi);
             }

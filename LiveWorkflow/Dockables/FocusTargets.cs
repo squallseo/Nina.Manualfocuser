@@ -34,12 +34,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         public IReadOnlyList<FocusTargetKind> TargetKinds { get; } = Enum.GetValues<FocusTargetKind>();
         public bool CanEditTargets => !disposed && !isGoingToFocusTarget;
         public bool IsStarTargetCategory => SelectedTargetKind == FocusTargetKind.Stars;
+        public bool CanSearchFocusTargets => SelectedTargetKind == FocusTargetKind.DeepSky;
         public bool IsSearchingTargets => refreshingFocusTargets;
         public string TargetSearchHint => SelectedTargetKind switch
         {
             FocusTargetKind.Stars => "Choose a bright star using the altitude and magnitude filters. Smaller magnitude values select brighter stars.",
             FocusTargetKind.DeepSky => "Search NINA Sky Atlas by name or ID: M31, NGC 7000, IC 1805. Up to 100 matches; refine the search if needed.",
-            _ => "Moon and planets; English or Korean names. Coordinates use the profile location and are refreshed just before Slew. Use Slew; plate solving does not center a planetary disk."
+            _ => "Choose the Moon or a planet from the list. Coordinates use the profile location and are refreshed just before Slew. Use Slew; plate solving does not center a planetary disk."
         };
         public FocusTargetKind SelectedTargetKind
         {
@@ -49,6 +50,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 if (!CanEditTargets || !Enum.IsDefined(value) || selectedTargetKind == value) return;
                 selectedTargetKind = value; focusTargetQuery = ""; rememberedTargetId = null;
                 RaisePropertyChanged(); RaisePropertyChanged(nameof(IsStarTargetCategory));
+                RaisePropertyChanged(nameof(CanSearchFocusTargets));
                 RaisePropertyChanged(nameof(TargetSearchHint)); RaisePropertyChanged(nameof(FocusTargetQuery));
                 QueueTargetSearch(false);
             }
@@ -58,7 +60,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             get => focusTargetQuery;
             set
             {
-                if (!CanEditTargets || IsStarTargetCategory || focusTargetQuery == (value ?? "")) return;
+                if (!CanEditTargets || !CanSearchFocusTargets || focusTargetQuery == (value ?? "")) return;
                 focusTargetQuery = value ?? ""; RaisePropertyChanged(); QueueTargetSearch(true);
             }
         }
@@ -213,7 +215,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             targetSearchCts = request;
             long version = ++targetSearchVersion;
             var kind = SelectedTargetKind;
-            string query = IsStarTargetCategory ? "" : FocusTargetQuery;
+            string query = CanSearchFocusTargets ? FocusTargetQuery : "";
             string selectedId = SelectedFocusTarget?.Id ?? SelectedFocusTarget?.Name ?? rememberedTargetId;
             double altitude = MinimumFocusAltitude, magnitude = MaximumFocusMagnitude;
             var site = focusProfileService.ActiveProfile.AstrometrySettings;

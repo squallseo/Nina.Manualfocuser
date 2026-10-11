@@ -8,11 +8,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
 
     public static class RoiInteraction
     {
-        public static RoiHandle HitTest(Rect rectangle, Point point)
+        public static RoiHandle HitTest(Rect rectangle, Point point, double tolerance = 6)
         {
-            var hit = rectangle; hit.Inflate(6, 6);
+            var hit = rectangle; hit.Inflate(tolerance, tolerance);
             if (!hit.Contains(point)) return RoiHandle.Draw;
-            double tx = Math.Min(6, rectangle.Width / 3), ty = Math.Min(6, rectangle.Height / 3);
+            double tx = Math.Min(tolerance, rectangle.Width / 3), ty = Math.Min(tolerance, rectangle.Height / 3);
             RoiHandle handle = RoiHandle.None;
             if (Math.Abs(point.X - rectangle.Left) <= tx) handle |= RoiHandle.Left;
             else if (Math.Abs(point.X - rectangle.Right) <= tx) handle |= RoiHandle.Right;

@@ -1,23 +1,30 @@
 using System;
 using System.Threading;
+using NINA.Image.Interfaces;
 
 namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
 {
     /// <summary>A read-only ROI over a host-owned 16-bit frame. No full-frame double expansion.</summary>
     public sealed class FocusRawFrame
     {
+        private static long nextFrameId;
+        public long FrameId { get; } = Interlocked.Increment(ref nextFrameId);
         public ushort[] Pixels { get; }
         public int Stride { get; }
         public int Left { get; }
         public int Top { get; }
         public int Width { get; }
         public int Height { get; }
-        public FocusRawFrame(ushort[] pixels, int stride, int left, int top, int width, int height)
+        public IImageData SourceImage { get; }
+        public bool UseAutofocusRoi { get; }
+        public FocusRawFrame(ushort[] pixels, int stride, int left, int top, int width, int height, IImageData sourceImage = null, bool useAutofocusRoi = false)
         {
             if (pixels == null || stride < 1 || left < 0 || top < 0 || width < 1 || height < 1 ||
                 (long)left + width > stride || ((long)top + height - 1) * stride + left + width > pixels.Length)
                 throw new ArgumentException("Invalid raw preview ROI.");
             Pixels = pixels; Stride = stride; Left = left; Top = top; Width = width; Height = height;
+            SourceImage = sourceImage;
+            UseAutofocusRoi = useAutofocusRoi;
         }
         public ushort Sample(int index)
         {

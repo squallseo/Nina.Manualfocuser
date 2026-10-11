@@ -81,7 +81,7 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
                         // The display consumer needs original ushort pixels, not an
                         // eight-byte copy of every pixel. Keep the host buffer alive
                         // only for the current/latest frame; measurements use raw values.
-                        var rawFrame = new FocusRawFrame(raw, width, left, top, cw, ch);
+                        var rawFrame = new FocusRawFrame(raw, width, left, top, cw, ch, image);
                         var pixels = retainRawPixels ? null : rawFrame.ToDoubles(ct);
                         yield return new StreamPreviewFrame(pixels, cw, ch, hardware, new PreviewTiming(receiveMs, 0, convertMs, timer.Elapsed.TotalMilliseconds, width, height),
                             acquisitionStarted, Stopwatch.GetTimestamp(), image.Properties.BitDepth, image.Properties.IsBayered,

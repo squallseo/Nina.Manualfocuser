@@ -1,0 +1,11 @@
+<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.LiveFocusHistoryView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:oxy="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Contrib.Wpf">
+  <oxy:Plot x:Name="HistoryPlot" Padding="0" ToolTip="{Binding HistoryTitle}" Background="{DynamicResource BackgroundBrush}" PlotAreaBackground="{DynamicResource BackgroundBrush}">
+    <oxy:Plot.Axes>
+      <oxy:LinearAxis Position="Bottom" Minimum="{Binding HistoryAxisMinimum}" Maximum="{Binding HistoryAxisMaximum}" Title="{Binding HistoryAxisTitle}" IsPanEnabled="False" IsZoomEnabled="False" TextColor="#AAAAAA" TitleColor="#AAAAAA"/>
+      <oxy:LinearAxis Position="Left" Title="HFR (px)" Minimum="0" IsPanEnabled="False" IsZoomEnabled="False" TextColor="#AAAAAA" TitleColor="#AAAAAA" MajorGridlineStyle="Dot"/>
+    </oxy:Plot.Axes>
+    <oxy:Plot.Series>
+      <oxy:LineSeries ItemsSource="{Binding FocusGraphPoints}" DataFieldX="X" DataFieldY="Y" Color="#FFD54F" LineStyle="Solid" StrokeThickness="1.5" MarkerType="Circle" MarkerSize="1.5" MarkerFill="#FFD54F"/>
+    </oxy:Plot.Series>
+  </oxy:Plot>
+</UserControl>

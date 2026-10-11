@@ -15,9 +15,17 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
     {
         // The frozen image retains its own raw preview for display adjustments.
         // Weak keys release that buffer when a frame is replaced; no image history.
-        private sealed record PreviewPixels(double[] Pixels, int Width, int Height, BahtinovMeasurement Overlay, double Strength, BitmapSource Bitmap, FocusRawFrame Raw = null, bool Inspector = false);
+        public sealed record InspectorTile(int X, int Y, BitmapSource Bitmap);
+        private sealed record PreviewPixels(double[] Pixels, int Width, int Height, BahtinovMeasurement Overlay, double Strength, BitmapSource Bitmap, FocusRawFrame Raw = null, bool Inspector = false, bool AutoStretch = true, InspectorTile[] Tiles = null) {
+            public FocusHfrMeasurement StarAnnotation { get; set; }
+        }
         private readonly ConditionalWeakTable<ImageSource, PreviewPixels> previewPixels = new();
         private double previewStretchStrength = 1;
+        private bool previewAutoStretch = true;
+        public bool PreviewAutoStretch {
+            get => previewAutoStretch;
+            set { if (previewAutoStretch==value) return; previewAutoStretch=value; RaisePropertyChanged(); stretchRefresh?.Cancel(); _ = RefreshPreviewStretchAsync(); }
+        }
         private CancellationTokenSource stretchRefresh;
         private readonly SemaphoreSlim stretchRenderGate = new(1, 1);
         public double PreviewStretchStrength
@@ -52,13 +60,15 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 // Debounce slider drags, including the larger full-frame ROI image.
                 await Task.Delay(80, cancellation.Token);
                 double strength = PreviewStretchStrength;
+                bool autoStretch = PreviewAutoStretch;
                 var focus = FocusPreviewImage; var overview = overviewImage; var selection = RoiSelectionPreview;
                 async Task<ImageSource> Render(ImageSource source)
                 {
                     if (source == null || !previewPixels.TryGetValue(source, out var raw)) return source;
-                    if (raw.Strength == strength) return source;
+                    bool inspector = ReferenceEquals(source,focus) && IsAberrationInspector && !IsSelectingRoi;
+                    if (raw.Strength == strength && raw.AutoStretch == autoStretch && raw.Inspector == inspector) return source;
                     await stretchRenderGate.WaitAsync(cancellation.Token);
-                    try { return await Task.Run(() => raw.Inspector
+                    try { return await Task.Run(() => inspector && raw.Raw != null
                         ? RenderAberrationPreview(raw.Raw, strength) : raw.Raw != null
                         ? RenderRawFocusPreview(raw.Raw, raw.Overlay, strength)
                         : RenderFocusPreview(raw.Pixels, raw.Width, raw.Height, raw.Overlay, strength), cancellation.Token); }
@@ -75,6 +85,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 UpdateMainRoiEditor();
                 if (ReferenceEquals(RoiSelectionPreview, selection)) RoiSelectionPreview = newSelection;
                 RaisePropertyChanged(nameof(FocusPreviewImage)); RaisePropertyChanged(nameof(LiveDisplayImage));
+                RaisePropertyChanged(nameof(LiveDisplayBitmap)); RaisePropertyChanged(nameof(LiveDisplayOverlay));
+                RaisePropertyChanged(nameof(LiveDisplayInspectorTiles)); RaisePropertyChanged(nameof(HasDisplayInspectorTiles));
                 RaisePropertyChanged(nameof(RoiSelectionPreview));
             }
             catch (OperationCanceledException) { }

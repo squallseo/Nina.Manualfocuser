@@ -31,6 +31,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         public void Report(T value) { }
     }
     [Export(typeof(IDockableVM))]
+    [Export(typeof(ManualFocuserDockableVM))]
+    [PartCreationPolicy(CreationPolicy.Shared)]
     public partial class ManualFocuserDockableVM : DockableVM, IDisposable,
         ICameraConsumer, IFocuserConsumer, ITelescopeConsumer, IFilterWheelConsumer, IGuiderConsumer
     {
@@ -45,6 +47,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         private readonly IPlateSolverFactory plateSolverFactory;
         private readonly IApplicationStatusMediator applicationStatusMediator;
         private readonly LiveFocusModel DataModel;
+        private readonly IFocusHfrAnalyzer focusHfrAnalyzer;
         private CancellationTokenSource moveCts;
         private bool disposed, moving, capturing, lastFocuserConnected;
         private string lastGotoUnavailableReason;
@@ -81,35 +84,43 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         public ICommand MoveOUTCommand { get; }
         public ICommand HaltFocuserCommand { get; }
         public override bool IsTool { get; } = true;
-        [ImportingConstructor]
         public ManualFocuserDockableVM(IProfileService profiles, ICameraMediator camera, IImagingMediator imaging,
             IFilterWheelMediator wheel, IFocuserMediator focuser, ITelescopeMediator telescope, IGuiderMediator guider,
             IDomeMediator dome, IDomeFollower follower, IPlateSolverFactory solver, IApplicationStatusMediator status)
             : this(profiles, camera, imaging, wheel, focuser, telescope, guider, dome, follower, solver, status,
                 new NinaFocusTargetCatalogue(), () => DateTime.UtcNow) { }
 
+        [ImportingConstructor]
+        public ManualFocuserDockableVM(IProfileService profiles, ICameraMediator camera, IImagingMediator imaging,
+            IFilterWheelMediator wheel, IFocuserMediator focuser, ITelescopeMediator telescope, IGuiderMediator guider,
+            IDomeMediator dome, IDomeFollower follower, IPlateSolverFactory solver, IApplicationStatusMediator status, IFocusHfrAnalyzer analyzer)
+            : this(profiles, camera, imaging, wheel, focuser, telescope, guider, dome, follower, solver, status,
+                new NinaFocusTargetCatalogue(), () => DateTime.UtcNow, analyzer) { }
+
         public ManualFocuserDockableVM(IProfileService profiles, ICameraMediator camera, IImagingMediator imaging,
             IFilterWheelMediator wheel, IFocuserMediator focuser, ITelescopeMediator telescope, IGuiderMediator guider,
             IDomeMediator dome, IDomeFollower follower, IPlateSolverFactory solver, IApplicationStatusMediator status,
-            IFocusTargetCatalogue catalogue, Func<DateTime> utcNow) : base(profiles)
+            IFocusTargetCatalogue catalogue, Func<DateTime> utcNow, IFocusHfrAnalyzer analyzer = null) : base(profiles)
         {
             targetCatalogue = catalogue ?? throw new ArgumentNullException(nameof(catalogue));
             targetUtcNow = utcNow ?? throw new ArgumentNullException(nameof(utcNow));
+            focusHfrAnalyzer = analyzer;
             cameraMediator = camera; imagingMediator = imaging; filterWheelMediator = wheel; focuserMediator = focuser;
             telescopeMediator = telescope; guiderMediator = guider; domeMediator = dome; domeFollower = follower;
             plateSolverFactory = solver; applicationStatusMediator = status;
-            Title = "Manual Focuser";
+            Title = "MF Controls";
             var dictionary = new ResourceDictionary { Source = new Uri("Cwseo.NINA.ManualFocuser;component/LiveWorkflow/Dockables/ManualFocuserDockableTemplates.xaml", UriKind.RelativeOrAbsolute) };
             ImageGeometry = (System.Windows.Media.GeometryGroup)dictionary["Cwseo.NINA.ManualFocuser_SVG"]; ImageGeometry.Freeze();
             DataModel = new LiveFocusModel(profiles, imaging, camera);
-            InitializeFocusTargets(profiles); InitializeFocusAssist(); ObservePreparedImages(imaging);
+            InitializeFocusWorkspace(); InitializeImageTools(); InitializeFocusTargets(profiles); InitializeFocusAssist(); ObservePreparedImages(imaging);
             MoveToPositionCommand = new AsyncCommand<int>(() => RunGuarded("Move to position", () => MoveStandaloneAsync(null)), _ => CanMove());
             MoveINCommand = new AsyncCommand<int>(() => RunGuarded("Move in", () => MoveStandaloneAsync(-UserStep)), _ => CanMove());
             MoveOUTCommand = new AsyncCommand<int>(() => RunGuarded("Move out", () => MoveStandaloneAsync(UserStep)), _ => CanMove());
             HaltFocuserCommand = new RelayCommand(_ => { assistCts?.Cancel(); moveCts?.Cancel(); });
             camera.RegisterConsumer(this); focuser.RegisterConsumer(this); telescope.RegisterConsumer(this); wheel.RegisterConsumer(this); guider.RegisterConsumer(this);
         }
-        private bool CanMove() => !disposed && FocuserInfo?.Connected == true && !FocuserInfo.IsMoving && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && !IsSelectingRoi;
+        private bool CanMove() => !disposed && FocuserInfo?.Connected == true && !FocuserInfo.IsMoving && !IsMoving && !IsCapturing && !IsGoingToFocusTarget && !IsSelectingRoi
+            && (!IsManualFocus || !TakeShootAfterMove || CameraInfo?.Connected != true || CanStartAssist());
         private async Task<int> MoveStandaloneAsync(int? relative)
         {
             if (!CanMove()) return 0;
@@ -117,7 +128,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             long requested = relative is int distance ? (long)FocuserInfo.Position + distance : TargetPosition;
             int maximum = (focuserMediator.GetDevice() as IFocuser)?.MaxStep ?? int.MaxValue;
             if (requested < 0 || requested > (maximum > 0 ? maximum : int.MaxValue)) throw new InvalidOperationException("Target is outside the focuser travel range.");
-            moveCts?.Dispose(); moveCts = new CancellationTokenSource(); IsMoving = true;
+            bool captureAfterMove = IsManualFocus && TakeShootAfterMove && CameraInfo?.Connected == true;
+            if (captureAfterMove && !CanStartAssist()) return 0;
+            if (captureAfterMove && HfrAnalysisEnabled && focusHfrAnalyzer == null) throw new InvalidOperationException("NINA multi-star HFR analyzer is unavailable.");
+            moveCts?.Dispose(); moveCts = new CancellationTokenSource();
+            bool captureStarted = false;
+            if (captureAfterMove) BeginAssist(false);
+            using var cancelCapture = moveCts.Token.Register(() => { if (captureAfterMove) assistCts?.Cancel(); });
+            IsMoving = true;
             try
             {
                 var device = focuserMediator.GetInfo();
@@ -126,9 +144,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 moveCts.Token.ThrowIfCancellationRequested();
                 var current = focuserMediator.GetInfo();
                 if (current?.Connected != true || current.DeviceId != id || actual != requested) throw new InvalidOperationException("Focuser did not reach the requested position.");
-                FocuserInfo = current; RaisePropertyChanged(nameof(FocuserInfo)); return 1;
+                if (current.IsMoving || current.Position != requested) throw new InvalidOperationException("Focuser is not stationary at the requested position.");
+                FocuserInfo = current; RaisePropertyChanged(nameof(FocuserInfo));
+                IsMoving = false;
+                if (captureAfterMove) { captureStarted = true; return await CaptureManualFocusAsync(alreadyReserved: true); }
+                return 1;
             }
-            finally { IsMoving = false; }
+            finally { IsMoving = false; if (captureAfterMove && !captureStarted) { assistCts?.Cancel(); EndAssist(false); } }
         }
         private async Task<int> RunGuarded(string operation, Func<Task<int>> action)
         {
@@ -143,7 +165,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             if (dispatcher == null || dispatcher.CheckAccess()) action(); else dispatcher.BeginInvoke(action);
         }
         public void UpdateDeviceInfo(FocuserInfo info) { if (info == null) return; ApplyOnUiThread(() => { FocuserInfo = info; RaisePropertyChanged(nameof(FocuserInfo)); if (info.Connected != lastFocuserConnected) { lastFocuserConnected = info.Connected; CommandManager.InvalidateRequerySuggested(); } }); }
-        public void UpdateDeviceInfo(CameraInfo info) { if (info == null) return; ApplyOnUiThread(() => { CameraInfo = info; RaisePropertyChanged(nameof(CameraInfo)); RaisePropertyChanged(nameof(IsCameraConnected)); RaisePropertyChanged(nameof(CameraConnectionText)); RaisePropertyChanged(nameof(PreviewRoiRectangle)); RaisePropertyChanged(nameof(PreviewRoiPreset)); RaisePropertyChanged(nameof(HasRoiSensorDimensions)); RaisePropertyChanged(nameof(CanUseFocusStreaming)); RefreshGotoAvailability(); }); }
+        public void UpdateDeviceInfo(CameraInfo info) { if (info == null) return; ApplyOnUiThread(() => { CameraInfo = info; ApplyDefaultPreviewRoi(); RaisePropertyChanged(nameof(CameraInfo)); RaisePropertyChanged(nameof(IsCameraConnected)); RaisePropertyChanged(nameof(CameraConnectionText)); RaisePropertyChanged(nameof(PreviewRoiRectangle)); RaisePropertyChanged(nameof(PreviewRoiPreset)); RaisePropertyChanged(nameof(HasRoiSensorDimensions)); RaisePropertyChanged(nameof(CanUseFocusStreaming)); RefreshGotoAvailability(); }); }
         public void UpdateDeviceInfo(TelescopeInfo info) { if (info == null) return; ApplyOnUiThread(() => { TelescopeInfo = info; RaisePropertyChanged(nameof(TelescopeInfo)); RefreshGotoAvailability(); }); }
         public void UpdateDeviceInfo(FilterWheelInfo info) { if (info == null) return; ApplyOnUiThread(() => { FilterwheelInfo = info; RaisePropertyChanged(nameof(FilterwheelInfo)); }); }
         public void UpdateDeviceInfo(GuiderInfo info) { if (info == null) return; ApplyOnUiThread(() => { GuiderInfo = info; RaisePropertyChanged(nameof(GuiderInfo)); RefreshGotoAvailability(); }); }
@@ -151,10 +173,13 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         public void UpdateUserFocused(FocuserInfo info) { UpdateDeviceInfo(info); }
         public void Dispose()
         {
-            if (disposed) return; disposed = true; targetSearchCts?.Cancel(); stretchRefresh?.Cancel(); assistCts?.Cancel(); moveCts?.Cancel(); gotoCts?.Cancel(); StopObservingPreparedImages();
+            if (disposed) return; disposed = true; targetSearchCts?.Cancel(); stretchRefresh?.Cancel(); assistCts?.Cancel(); moveCts?.Cancel(); gotoCts?.Cancel(); syncImageCts?.Cancel(); SetSyncSource(null); StopObservingPreparedImages();
             // Disposal already sets disposed: bypass the update guard for UI cleanup.
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            void CleanViews() { StopMainRoiEditor(); StopNinaHfrHistory(); }
+            void CleanViews() {
+                StopMainRoiEditor(); StopNinaHfrHistory();
+                foreach (var panel in focusPanels) panel.PropertyChanged -= OnFocusPanelVisibilityChanged;
+            }
             if (dispatcher == null || dispatcher.CheckAccess()) CleanViews();
             else dispatcher.BeginInvoke(new Action(CleanViews));
             try { cameraMediator.RemoveConsumer(this); } catch (Exception e) { Logger.Error("Live Focus camera consumer cleanup failed", e); }

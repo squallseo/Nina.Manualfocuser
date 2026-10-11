@@ -5,9 +5,14 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
     /// <summary>Display-only automatic background/noise and midtone normalization.</summary>
     public static class FocusDisplayStretch
     {
-        public static byte[] Render(double[] pixels, double strength = 1)
+        public static byte[] Render(double[] pixels, double strength = 1, bool autoStretch = true)
         {
             if (pixels == null || pixels.Length == 0) throw new ArgumentException("Empty preview.");
+            if (!autoStretch) {
+                var linear = new byte[pixels.Length];
+                for (int i=0;i<linear.Length;i++) linear[i]=(byte)Math.Round(Math.Clamp(double.IsFinite(pixels[i]) ? pixels[i] : 0,0,65535)*255/65535);
+                return linear;
+            }
             var sample = new double[Math.Min(pixels.Length, 65536)];
             for (int i = 0; i < sample.Length; i++)
             {
@@ -19,10 +24,21 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
             for (int i = 0; i < bytes.Length; i++) bytes[i] = map.Apply(double.IsFinite(pixels[i]) ? pixels[i] : 0);
             return bytes;
         }
-        public static byte[] RenderRaw(FocusRawFrame frame, double strength = 1)
+        public static byte[] RenderRaw(FocusRawFrame frame, double strength = 1, bool autoStretch = true)
         {
             if (frame == null) throw new ArgumentNullException(nameof(frame));
             int count = checked(frame.Width * frame.Height);
+            if (!autoStretch) {
+                var linear = new byte[count];
+                double maximum=Math.Pow(2,Math.Clamp(frame.SourceImage?.Properties.BitDepth ?? 16,1,16))-1;
+                var linearLookup = new byte[65536];
+                for (int i=0;i<linearLookup.Length;i++) linearLookup[i]=(byte)Math.Round(Math.Clamp(i/maximum,0,1)*255);
+                for (int row=0;row<frame.Height;row++) {
+                    int source=(frame.Top+row)*frame.Stride+frame.Left, dest=row*frame.Width;
+                    for (int col=0;col<frame.Width;col++) linear[dest+col]=linearLookup[frame.Pixels[source+col]];
+                }
+                return linear;
+            }
             var sample = new double[Math.Min(count, 65536)];
             for (int i = 0; i < sample.Length; i++) sample[i] = frame.Sample((int)((long)i * count / sample.Length));
             var map = CreateMap(sample, strength);

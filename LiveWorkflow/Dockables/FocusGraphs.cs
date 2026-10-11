@@ -10,8 +10,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         private double lastGraphTime = double.NegativeInfinity;
         private bool showLiveGraphs;
         private NinaHfrHistoryOutput ninaHfrHistory;
-        internal bool CanPublishNinaHfrHistory => !disposed && liveImageOutputActive &&
-            IsFocusAssistRunning && !IsStoppingFocusPreview && !IsSelectingRoi;
+        internal bool CanPublishNinaHfrHistory => false;
         public DataPoint[] LiveGraphPoints { get; private set; } = Array.Empty<DataPoint>();
         public bool ShowLiveGraphs
         {
@@ -29,22 +28,26 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             lastGraphTime = seconds;
             LiveGraphPoints = liveHistory.DisplayPoints();
             RaisePropertyChanged(nameof(LiveGraphPoints));
+            if (!IsManualFocus) {
+                RaisePropertyChanged(nameof(FocusGraphPoints));
+                RaisePropertyChanged(nameof(HistoryAxisMinimum)); RaisePropertyChanged(nameof(HistoryAxisMaximum));
+            }
             ninaHfrHistory?.UpdateFrame();
         }
         private void ClearLiveHistory()
         {
             liveHistory.Clear(); lastGraphTime = double.NegativeInfinity;
             LiveGraphPoints = Array.Empty<DataPoint>(); RaisePropertyChanged(nameof(LiveGraphPoints));
+            if (!IsManualFocus) RefreshHistoryPresentation();
             ninaHfrHistory?.UpdateFrame();
+        }
+        private void ClearFocusHistory() {
+            if (IsManualFocus) { positionHistory.Clear(); RefreshHistoryPresentation(); }
+            else ClearLiveHistory();
         }
         private void UpdateNinaHfrHistory()
         {
-            if (CanPublishNinaHfrHistory)
-            {
-                ninaHfrHistory ??= new NinaHfrHistoryOutput(this);
-                ninaHfrHistory.Start();
-            }
-            else StopNinaHfrHistory();
+            StopNinaHfrHistory();
         }
         private void StopNinaHfrHistory()
         {

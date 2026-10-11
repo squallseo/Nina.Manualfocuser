@@ -6,13 +6,19 @@
 
     <!-- NINA locates the dockable using its fully qualified name and _Dockable suffix. -->
     <DataTemplate x:Key="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM_Dockable">
-        <local:ManualFocuserDockableView/>
+        <local:FocusControlsView/>
+    </DataTemplate>
+    <DataTemplate x:Key="Cwseo.NINA.ManualFocuser.Dockables.FocusImageDockableVM_Dockable">
+        <local:ManualFocuserDockableView DataContext="{Binding Session}"/>
+    </DataTemplate>
+    <DataTemplate x:Key="Cwseo.NINA.ManualFocuser.Dockables.FocusHistoryDockableVM_Dockable">
+        <local:FocusHistoryPanelView/>
     </DataTemplate>
 
-    <!-- Theme-colored play triangle, open focus ring and star. Matches Images/live-focus-icon.svg. -->
+    <!-- Preserve the original Manual Focuser MF icon for the plugin update. -->
     <GeometryGroup x:Key="Cwseo.NINA.ManualFocuser_SVG">
-        <PathGeometry Figures="M18.104 5.724 A12 12 0 1 0 24.875 11.929 L22.428 13.070 A9.3 9.3 0 1 1 17.181 8.261 Z"/>
-        <PathGeometry Figures="M10.5 11 L20 17 L10.5 23 Z"/>
-        <PathGeometry Figures="M25 0 C25.6 4.3 26.4 5.1 30 6 C26.4 6.9 25.6 7.7 25 12 C24.4 7.7 23.6 6.9 20 6 C23.6 5.1 24.4 4.3 25 0 Z"/>
+        <PathGeometry Figures="M 1.01725e-005,-0.134583L 1.01725e-005,116.235L 8.08268,116.235L 8.08268,7.94806L 116.369,7.94806L 116.369,-0.134583M 427.765,-0.134583L 427.765,7.94806L 536.057,7.94806L 536.057,116.235L 544.135,116.235L 544.135,-0.134583M 1.01725e-005,427.631L 1.01725e-005,544L 116.369,544L 116.369,535.923L 8.08268,535.923L 8.08268,427.631M 536.057,427.631L 536.057,535.923L 427.765,535.923L 427.765,544L 544.135,544L 544.135,427.631" />
+        <PathGeometry Figures="M 180,337 L 180,198 L 205,198 L 240,250 L 275,198 L 300,198 L 300,337 L 280,337 L 280,235 L 240,275 L 200,235 L 200,337 Z" />
+        <PathGeometry Figures="M 308.357,197.795L 388.795,197.795L 388.795,213.732L 327.295,213.732L 327.295,254.982L 382.795,254.982L 382.795,270.92L 327.295,270.92L 327.295,337.774L 308.357,337.774L 308.357,197.795 Z " />
     </GeometryGroup>
 </ResourceDictionary>

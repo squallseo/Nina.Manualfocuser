@@ -146,7 +146,9 @@ internal static class TargetPickerChecks
             vm.SelectedTargetKind = FocusTargetKind.SolarSystem; await Pending();
             check(vm.FocusTargets.Count == 8 && vm.FocusTargets.All(t => t.Kind == FocusTargetKind.SolarSystem), "Solar system lists every Moon/planet target independently of star filters");
             vm.FocusTargetQuery = "달"; await Pending();
-            check(vm.FocusTargets.Single().SolarBody == NOVAS.Body.Moon && !vm.GotoFocusTargetCommand.CanExecute(null) &&
+            check(vm.FocusTargetQuery == "" && vm.FocusTargets.Count == 8 && !vm.CanSearchFocusTargets,"Solar system ignores search input and keeps the complete target list");
+            vm.SelectedFocusTarget = vm.FocusTargets.Single(t => t.SolarBody == NOVAS.Body.Moon);
+            check(!vm.GotoFocusTargetCommand.CanExecute(null) &&
                 vm.GotoFocusTargetTooltip.Contains("disk"), "The Moon supports Slew and explains why stellar centering is unavailable");
             var moon = FocusTargetPlanner.SolarSystemTargets.Single(t => t.SolarBody == NOVAS.Body.Moon);
             utc = Enumerable.Range(0, 24).Select(hour => new DateTime(2026, 10, 9, hour, 0, 0, DateTimeKind.Utc))
@@ -156,7 +158,7 @@ internal static class TargetPickerChecks
             guiderInfo.Connected = true; stopStarted = new(); finishStop = new();
             var move = Move(false); await stopStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             vm.SelectedTargetKind = FocusTargetKind.DeepSky; vm.FocusTargetQuery = "M31"; vm.SelectedFocusTarget = dsos[0];
-            check(!vm.CanEditTargets && vm.SelectedTargetKind == FocusTargetKind.SolarSystem && vm.FocusTargetQuery == "달" && vm.SelectedFocusTarget.SolarBody == NOVAS.Body.Moon,
+            check(!vm.CanEditTargets && vm.SelectedTargetKind == FocusTargetKind.SolarSystem && vm.FocusTargetQuery == "" && vm.SelectedFocusTarget.SolarBody == NOVAS.Body.Moon,
                 "An active GOTO locks category, query and selected target");
             finishStop.SetResult(true);
             int moveResult = await move;
@@ -189,16 +191,64 @@ internal static class TargetPickerChecks
         }
     }
 
+    private sealed class PluginOptionsPreview
+    {
+        public bool UseFocusStreaming { get; set; } = true;
+        public bool EnableFocusDiagnostics { get; set; }
+    }
+
+    private static void RenderPluginOptions()
+    {
+        var resources = new ResourceDictionary { Source = new Uri("/Cwseo.NINA.ManualFocuser;component/Options.xaml", UriKind.Relative) };
+        var template = (DataTemplate)resources["Manual Focuser_Options"];
+        foreach (int width in new[] { 350, 480 })
+        {
+            var content = (FrameworkElement)template.LoadContent();
+            content.DataContext = new PluginOptionsPreview();
+            var surface = new Border { Background = (System.Windows.Media.Brush)Application.Current.Resources["BackgroundBrush"], Child = content };
+            surface.Measure(new Size(width, 180)); surface.Arrange(new Rect(0, 0, width, 180)); surface.UpdateLayout();
+            surface.Dispatcher.Invoke(() => {}, DispatcherPriority.DataBind); surface.UpdateLayout();
+            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(width, 180, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            bitmap.Render(surface);
+            var png = new System.Windows.Media.Imaging.PngBitmapEncoder(); png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+            using var file = File.Create($"bin/plugin-options-{width}.png"); png.Save(file);
+        }
+    }
+
     private static async Task VerifyUi(ManualFocuserDockableVM vm, Action<bool, string> check)
     {
         Application.Current.Resources["ProfileService"] = new { ActiveProfile = new { ColorSchemaSettings = new { ColorSchema = new {
             PrimaryColor = System.Windows.Media.Colors.White, SecondaryColor = System.Windows.Media.Colors.Gray,
+            SecondaryBackgroundColor = System.Windows.Media.Color.FromRgb(90,96,104),
             BackgroundColor = System.Windows.Media.Color.FromRgb(27,29,32), BorderColor = System.Windows.Media.Colors.Gray,
             ButtonBackgroundColor = System.Windows.Media.Color.FromRgb(50,54,60), ButtonBackgroundSelectedColor = System.Windows.Media.Color.FromRgb(71,81,96),
-            ButtonForegroundColor = System.Windows.Media.Colors.White } } } };
+            ButtonForegroundColor = System.Windows.Media.Colors.White,
+            ButtonForegroundDisabledColor = System.Windows.Media.Colors.Gray,
+            TertiaryBackgroundColor = System.Windows.Media.Color.FromRgb(27,29,32) } } } };
         foreach (string name in new[] { "Brushes", "SVGDictionary", "Converters" })
-            Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"/NINA.WPF.Base;component/Resources/StaticResources/{name}.xaml", UriKind.Relative) });
-        var view = new ManualFocuserDockableView { DataContext = vm };
+            Application.Current.Resources.MergedDictionaries.Add(new NINA.WPF.Base.Utility.SharedResourceDictionary { Source = new Uri($"/NINA.WPF.Base;component/Resources/StaticResources/{name}.xaml", UriKind.Relative) });
+        _ = Application.Current.FindResource("PrimaryBrush");
+        _ = Application.Current.FindResource("BorderBrush");
+        // PluginLoader composes exported dictionaries and merges them into the
+        // application's resources on a worker, after host UI resources exist.
+        // Top-level shared brushes/styles must not cross that thread boundary.
+        var exports = typeof(ManualFocuserDockableVM).Assembly.GetTypes().Where(t =>
+            t.GetCustomAttributes<System.ComponentModel.Composition.ExportAttribute>()
+                .Any(e => e.ContractType == typeof(ResourceDictionary))).ToArray();
+        using (var composition = new System.ComponentModel.Composition.Hosting.CompositionContainer(
+            new System.ComponentModel.Composition.Hosting.TypeCatalog(exports)))
+        {
+            var loading = Task.Run(() => {
+                var dictionaries = composition.GetExportedValues<ResourceDictionary>().ToArray();
+                foreach (var dictionary in dictionaries) Application.Current.Resources.MergedDictionaries.Add(dictionary);
+                return dictionaries.Length;
+            });
+            check(loading.Wait(TimeSpan.FromSeconds(10)), "Exported plugin resources load without waiting for the UI dispatcher");
+            check(await loading == exports.Length && exports.Length > 0,
+                "Every exported resource dictionary composes and merges on the host loader's background thread");
+        }
+        RenderPluginOptions();
+        var view = new FocusControlsView { DataContext = vm };
         ((Expander)view.FindName("SetupExpander")).IsExpanded = true;
         foreach (int width in new[] { 350, 650, 950 })
         {
@@ -229,8 +279,8 @@ internal static class TargetPickerChecks
             view.Dispatcher.Invoke(() => {}, DispatcherPriority.DataBind); view.UpdateLayout();
             var filters = (FrameworkElement)((FrameworkElement)((TextBox)view.FindName("MaximumMagnitudeInput")).Parent).Parent;
             check(vm.SelectedTargetKind == kind && filters.Visibility == (kind == FocusTargetKind.Stars ? Visibility.Visible : Visibility.Collapsed) &&
-                ((FrameworkElement)view.FindName("TargetSearchPanel")).Visibility == (kind == FocusTargetKind.Stars ? Visibility.Collapsed : Visibility.Visible),
-                kind + " category switches the same criteria area between Alt/Mag and name search");
+                ((FrameworkElement)view.FindName("TargetSearchPanel")).Visibility == (kind == FocusTargetKind.DeepSky ? Visibility.Visible : Visibility.Collapsed),
+                kind + " category shows search only for Deep sky and Alt/Mag only for Stars");
         }
         input.Text = "M31";
         await ((Task<int>)typeof(ManualFocuserDockableVM).GetField("pendingTargetSearch", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(vm));
@@ -239,11 +289,103 @@ internal static class TargetPickerChecks
             "Typing into the visible search box updates the actual target list");
         check(((Button)view.FindName("SlewButton")).IsEnabled && ((Button)view.FindName("GotoButton")).IsEnabled,
             "Shared Slew and Center buttons become enabled after visible target search completes");
-        // Render the expanded setup in a tall dock so both cards are fully shown.
-        view.Measure(new Size(650,900)); view.Arrange(new Rect(0,0,650,900)); view.UpdateLayout();
-        var screenshot = new System.Windows.Media.Imaging.RenderTargetBitmap(650,400,96,96,System.Windows.Media.PixelFormats.Pbgra32);
-        screenshot.Render(view);
+        var imageBytes=new byte[1024*768];
+        for(int y=0;y<768;y++) for(int x=0;x<1024;x++) imageBytes[y*1024+x]=(byte)(25+(x*17+y*11)%15);
+        for(int i=0;i<70;i++) {
+            int sx=20+(i*197)%980,sy=20+(i*113)%720;
+            for(int dy=-3;dy<=3;dy++) for(int dx=-3;dx<=3;dx++) imageBytes[(sy+dy)*1024+sx+dx]=(byte)(35+210*Math.Exp(-(dx*dx+dy*dy)/3.0));
+        }
+        var annotationFrame=new FocusRawFrame(imageBytes.Select(b=>(ushort)(b*200)).ToArray(),1024,0,0,1024,768);
+        var previewBitmap=typeof(ManualFocuserDockableVM).GetMethod("RenderRawFocusPreview",BindingFlags.Instance|BindingFlags.NonPublic)
+            .Invoke(vm,new object[]{annotationFrame,null,null});
+        vm.ShowInNinaImage=true;
+        check(!vm.ShowInNinaImage,"Private live workspace cannot publish bitmap-only images to the host");
+        typeof(ManualFocuserDockableVM).GetProperty("FocusPreviewImage").SetValue(vm,previewBitmap);
+        typeof(ManualFocuserDockableVM).GetProperty("LiveGraphPoints").SetValue(vm,Enumerable.Range(0,120).Select(i=>new OxyPlot.DataPoint(i,3+.4*Math.Sin(i*.13))).ToArray());
+        vm.FocusMode = "Live";
+        vm.ShowHfrStarBoxes=true;
+        typeof(ManualFocuserDockableVM).GetMethod("PublishStarMeasurement",BindingFlags.Instance|BindingFlags.NonPublic)
+            .Invoke(vm,new object[]{new FocusHfrMeasurement(4,.2,70){Width=1024,Height=768,SourceFrameId=annotationFrame.FrameId,
+                Generation=(int)typeof(ManualFocuserDockableVM).GetField("hfrGeneration",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(vm),
+                StarSamples=Enumerable.Range(0,70).Select(i=>new FocusStarSample(20+(i*197)%980,20+(i*113)%720,4)).ToArray()}});
+        view.DataContext = null;
+        view.DataContext = vm;
+        var imageView = new ManualFocuserDockableView { DataContext = vm };
+        var historyView = new LiveFocusHistoryView { DataContext = vm };
+        var layout = new Grid { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(27,29,32)) };
+        layout.ColumnDefinitions.Add(new ColumnDefinition()); layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(390) });
+        layout.RowDefinitions.Add(new RowDefinition()); layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(180) });
+        Grid.SetColumn(view,1); Grid.SetRowSpan(view,2); Grid.SetRow(historyView,1);
+        layout.Children.Add(imageView);layout.Children.Add(view);layout.Children.Add(historyView);
+        layout.Measure(new Size(1725,1000)); layout.Arrange(new Rect(0,0,1725,1000)); layout.UpdateLayout();
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);layout.UpdateLayout();
+        var workspace=(Grid)imageView.FindName("PreviewWorkspace");
+        var controls=(StackPanel)view.FindName("ControlsPanel");
+        check(workspace.ActualWidth>1200 && controls.ActualWidth<400,"Independent image and control views fit the requested layout");
+        check(((FrameworkElement)view.FindName("LiveCameraControls")).Visibility==Visibility.Visible &&
+            ((FrameworkElement)view.FindName("RoiControls")).Visibility==Visibility.Visible &&
+            ((FrameworkElement)view.FindName("ManualCaptureControls")).Visibility==Visibility.Collapsed,"Live mode shows camera/ROI controls and hides manual capture controls");
+        check(historyView.ActualHeight>=150,"Independent HFR panel fits below the image");
+        var nativeViewer=imageView.FindName("FocusImageView") as NINA.WPF.Base.View.ImageView ??
+            ((Grid)imageView.FindName("PreviewCard")).Children.OfType<NINA.WPF.Base.View.ImageView>().Single();
+        var annotationView=(FocusStarOverlay)((FocusRoiOverlay)nativeViewer.ImageAreaContent).FindName("StarBoxes");
+        check(annotationView.Boxes.Length==70 && annotationView.ActualWidth==1024 && annotationView.ActualHeight==768,
+            "Actual MF Image paints shared measurement boxes on the full pixel-space overlay");
+        var nativeZoom=(System.Windows.Media.ScaleTransform)nativeViewer.FindName("PART_ScaleTransform");
+        nativeZoom.ScaleX=.5; nativeZoom.ScaleY=.5;
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        check(annotationView.Zoom==.5,"Star-box stroke follows the native zoom without moving measured pixel coordinates");
+        nativeZoom.ScaleX=1; nativeZoom.ScaleY=1;
+        check(typeof(ManualFocuserDockableVM).GetField("ninaHfrHistory",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(vm)==null,"Private history does not replace native captured-image history");
+        var screenshot = new System.Windows.Media.Imaging.RenderTargetBitmap(1725,1000,96,96,System.Windows.Media.PixelFormats.Pbgra32);
+        screenshot.Render(layout);
         var png = new System.Windows.Media.Imaging.PngBitmapEncoder(); png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(screenshot));
-        using var output = File.Create("bin/live-focus-target-search.png"); png.Save(output);
+        using var output = File.Create("bin/private-live-workspace.png"); png.Save(output);
+        var positionHistory = (PositionHfrHistory)typeof(ManualFocuserDockableVM).GetField("positionHistory",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(vm);
+        for (int i=0;i<11;i++) positionHistory.Record(9800+i*40,2.2+Math.Pow((i-5)*.3,2));
+        vm.FocusMode = "Manual";
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);layout.UpdateLayout();
+        check(((FrameworkElement)view.FindName("LiveCameraControls")).Visibility==Visibility.Collapsed &&
+            ((FrameworkElement)view.FindName("RoiControls")).Visibility==Visibility.Collapsed &&
+            ((FrameworkElement)view.FindName("ManualCaptureControls")).Visibility==Visibility.Visible,"Manual mode hides live camera/ROI controls and exposes capture-after-move workflow");
+        var captureToggle=(System.Windows.Controls.Primitives.ToggleButton)view.FindName("CaptureAfterMoveToggle");
+        bool captureAfterMove=vm.TakeShootAfterMove;
+        try {
+            captureToggle.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,!captureAfterMove);
+            check(vm.TakeShootAfterMove==!captureAfterMove && view.FindName("ManualCaptureButton")==null,
+                "Manual capture-after-move toggle controls the real setting without a separate Capture button");
+        } finally { vm.TakeShootAfterMove=captureAfterMove; }
+        var historyPlot = (OxyPlot.Wpf.Plot)historyView.FindName("HistoryPlot");
+        var bottomAxis = historyPlot.Axes.Single(a=>a.Position==OxyPlot.Axes.AxisPosition.Bottom);
+        check(bottomAxis.Title=="Focus position (steps)" && double.IsNaN(bottomAxis.Minimum) && double.IsNaN(bottomAxis.Maximum),"Visible history switches from fixed time to automatic position range");
+        var movement=historyPlot.Annotations.OfType<OxyPlot.Wpf.ArrowAnnotation>().Single();
+        var minimum=historyPlot.Annotations.OfType<OxyPlot.Wpf.PointAnnotation>().Single();
+        check(movement.StartPoint.X==10160 && movement.EndPoint.X==10200,"Manual arrow points from the previous measured focus position to the latest one");
+        check(minimum.X==10000 && minimum.Y==2.2 && minimum.Shape==OxyPlot.MarkerType.Triangle && minimum.Fill==System.Windows.Media.Colors.Red && minimum.Text.Contains("10000"),
+            "Manual minimum HFR has a red triangle and its actual focus position label");
+        var manualShot = new System.Windows.Media.Imaging.RenderTargetBitmap(1725,1000,96,96,System.Windows.Media.PixelFormats.Pbgra32);manualShot.Render(layout);
+        var manualPng = new System.Windows.Media.Imaging.PngBitmapEncoder();manualPng.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(manualShot));
+        using var manualOutput = File.Create("bin/private-manual-workspace.png");manualPng.Save(manualOutput);
+        var model=((OxyPlot.IPlotView)historyPlot).ActualModel;
+        check(model.Annotations.OfType<OxyPlot.Annotations.ArrowAnnotation>().Count()==1 && model.Annotations.OfType<OxyPlot.Annotations.PointAnnotation>().Count()==1,
+            "The rendered OxyPlot model includes both manual history annotations");
+        vm.ClearLiveGraphCommand.Execute(null);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);layout.UpdateLayout();
+        check(historyPlot.Annotations.Count==0 && vm.FocusGraphPoints.Length==0,"Clear removes both the measurements and manual arrow/minimum labels");
+        vm.FocusMode="Live";
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);layout.UpdateLayout();
+        check(historyPlot.Annotations.Count==0,"Live history never displays manual position annotations");
+        vm.SettingsVisible=true;
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); layout.UpdateLayout();
+        var settingsPanel=(ScrollViewer)view.FindName("FocusSettingsPanel");
+        check(controls.Visibility==Visibility.Collapsed && settingsPanel.Visibility==Visibility.Visible && settingsPanel.ActualHeight>0,
+            "Title-bar settings replace the normal Controls content without reserving permanent screen space");
+        var settingsShot=new System.Windows.Media.Imaging.RenderTargetBitmap(1725,1000,96,96,System.Windows.Media.PixelFormats.Pbgra32);settingsShot.Render(layout);
+        var settingsPng=new System.Windows.Media.Imaging.PngBitmapEncoder();settingsPng.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(settingsShot));
+        using(var settingsOutput=File.Create("bin/private-focus-settings.png"))settingsPng.Save(settingsOutput);
+        vm.CloseFocusSettingsCommand.Execute(null);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle); layout.UpdateLayout();
+        check(controls.Visibility==Visibility.Visible && settingsPanel.Visibility==Visibility.Collapsed,
+            "Done restores the capture and target controls and removes the settings panel from layout");
     }
 }

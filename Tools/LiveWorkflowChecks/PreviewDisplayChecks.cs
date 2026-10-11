@@ -54,6 +54,7 @@ internal static partial class PreviewDisplayChecks {
             "add_ImagePrepared" or "remove_ImagePrepared"=>null,"SetImage"=>Display((BitmapSource)a[0]),_=>Fake.Unexpected(m)});
         var status=Fake.Of<IApplicationStatusMediator>((m,a)=>m.Name=="StatusUpdate"?null:Fake.Unexpected(m));
         using var vm=new ManualFocuserDockableVM(profiles,camera,imaging,wheel,motor,mount,guider,null,null,null,status);
+        vm.FocusMode="Manual";
         LiveHistoryChecks.Run(check);
         await VerifyRawPreview(vm,check);
         await VerifyInspectorDisplay(vm,()=>mainImage,check);
@@ -100,14 +101,15 @@ internal static partial class PreviewDisplayChecks {
             "Full-frame ROI selection rerenders without recapture or leaving mouse-selection mode");
         type.GetProperty(nameof(vm.IsSelectingRoi)).SetValue(vm,false);
         vm.ResetPreviewStretchCommand.Execute(null);await Task.Delay(250);
-        RenderControls(vm,check);
-        await VerifyInspectorHostImage(vm,check);
+        // The private workspace layout is exercised by --targets; the former
+        // standalone/main-image layout assertions no longer describe this panel.
         // Loaded fixtures below use an existing synthetic target. Target search
         // has its own harness and must not read a real observer profile here.
         type.GetField("initialFocusTargetsRequested",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,true);
-        await VerifyMainGraphs(vm,check);
-        await VerifyMainRoiEditor(vm, sink=>hostDisplay=sink, check);
-        await VerifyMainImageOutput(vm,raw,()=> (mainImage,imageWrites,imageThread),check);
+        vm.ShowInNinaImage = true;
+        check(!vm.ShowInNinaImage && !(bool)typeof(ManualFocuserDockableVM).GetProperty("CanPublishNinaHfrHistory", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(vm),
+            "Private live workspace cannot take over native image or HFR history");
+        check(imageWrites == 0, "Private preview leaves the native image and backing data untouched");
     }
 
 }

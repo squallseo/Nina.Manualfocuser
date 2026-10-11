@@ -34,7 +34,7 @@ internal static partial class PreviewDisplayChecks
             "Non-streaming Inspector retains host ushort pixels without a full-sensor double allocation");
         var center=raw.CenterWindow();
         check(center.Width==256 && center.Height==256 && center.Pixels[0]==pixels[172*width+272],
-            "Inspector single-frame HFR keeps the original sensor-center 256-pixel window");
+            "Optional star-profile display retains its sensor-center 256-pixel window");
         var taken=(FocusRawFrame)typeof(LiveFocusModel).GetMethod("TakePreviewRawFrame",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(model,null);
         check(ReferenceEquals(taken,raw) && model.LastPreviewRawFrame==null,
             "The model releases its raw-frame reference after handing it to the preview consumer");

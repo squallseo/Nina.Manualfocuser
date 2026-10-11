@@ -13,6 +13,26 @@ using NINA.PlateSolving.Interfaces;
 using NINA.Profile.Interfaces;
 
 int passed = 0;
+if(args.Contains("--readme-screenshots")) {
+    int index=Array.IndexOf(args,"--readme-screenshots");
+    ReadmeScreenshots.Run(args[index+1],args[index+2]);return;
+}
+if (args.Contains("--star-tracking")) {
+    StarTrackingChecks.Run(Check);
+    Console.WriteLine($"{passed} star tracking checks passed; no hardware operated.");
+    return;
+}
+if (args.Contains("--mosaic-layout-stress")) {
+    await MosaicLayoutChecks.Run(Check);
+    return;
+}
+if(args.Contains("--inspector-cycle")){await InspectorSourceChecks.Run(args[Array.IndexOf(args,"--inspector-cycle")+1],true);return;}
+if(args.Contains("--inspector-files") && !args.Contains("--focus-workspace")){await InspectorSourceChecks.Run(args[Array.IndexOf(args,"--inspector-files")+1]);return;}
+if(args.Contains("--audit-focus")){AutofocusCurveAnalysis.RunAudit(args[Array.IndexOf(args,"--audit-focus")+1]);return;}
+if(args.Contains("--compare-focus")){AutofocusCurveAnalysis.Run(args[Array.IndexOf(args,"--compare-focus")+1]);return;}
+if (args.Contains("--host-image-perf")) { HostImagePerformance.Run(); return; }
+if (args.Contains("--host-image-files")) { HostImagePerformance.Run(args[Array.IndexOf(args,"--host-image-files")+1]); return; }
+if (args.Contains("--host-image-verify-files")) { HostImagePerformance.Run(args[Array.IndexOf(args,"--host-image-verify-files")+1],true); return; }
 void Check(bool condition, string description) {
     if (!condition) throw new Exception(description);
     passed++; Console.WriteLine("PASS " + description);
@@ -24,8 +44,8 @@ if (args.Contains("--identity")) {
     Check(assembly.GetCustomAttribute<AssemblyTitleAttribute>()?.Title == "Manual Focuser", "Existing plugin title retained");
     var exports = assembly.GetTypes().SelectMany(t => t.GetCustomAttributes<System.ComponentModel.Composition.ExportAttribute>().Select(a => (Type: t, Contract: a.ContractType))).ToArray();
     Check(exports.Count(e => e.Contract == typeof(NINA.Plugin.Interfaces.IPluginManifest)) == 1, "Only one plugin manifest exported");
-    Check(exports.Count(e => e.Contract == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM).GetInterfaces().Single(t => t.Name == "IDockableVM")) == 1 &&
-        exports.Any(e => e.Contract == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM).GetInterfaces().Single(t => t.Name == "IDockableVM") && e.Type == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM)), "Live workflow replaces the existing dockable without duplicate exports");
+    Check(exports.Count(e => e.Contract == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM).GetInterfaces().Single(t => t.Name == "IDockableVM")) == 3 &&
+        exports.Any(e => e.Contract == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM).GetInterfaces().Single(t => t.Name == "IDockableVM") && e.Type == typeof(Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM)), "One plugin exports three focus panels");
     Check(exports.Any(e => e.Contract == typeof(NINA.Sequencer.SequenceItem.ISequenceItem)), "Existing sequencer export preserved");
     Console.WriteLine($"{passed} migration identity checks passed; no hardware operated.");
     return;
@@ -35,9 +55,11 @@ async Task Reject<T>(Func<Task> action, string description) where T : Exception 
     try { await action(); } catch (T) { rejected = true; }
     Check(rejected, description);
 }
+if(args.Contains("--multi-star")){await MultiStarHfrChecks.Run(Check,args.Length>1?args[1]:null);Console.WriteLine($"{passed} multi-star checks passed; no hardware operated.");return;}
 if(args.Contains("--live-move")){LiveMoveChecks.Run(Check,args.Contains("--asi"),args.Contains("--inspector"));Console.WriteLine($"{passed} live movement checks passed; no hardware operated.");return;}
 if(args.Contains("--auto-roi")){AutoRoiVmChecks.Run(Check);Console.WriteLine($"{passed} explicit ROI checks passed; no hardware operated.");return;}
 if(args.Contains("--preview-display")){PreviewDisplayChecks.Run(Check);Console.WriteLine($"{passed} preview display checks passed; no hardware operated.");return;}
+if(args.Contains("--focus-workspace")){FocusWorkspaceChecks.Run(Check);Console.WriteLine($"{passed} focus workspace checks passed; no hardware operated.");return;}
 if(args.Contains("--focuser")){FocuserChecks.Run(Check);Console.WriteLine($"{passed} manual focuser checks passed; no hardware operated.");return;}
 if(args.Contains("--preview-perf")){PreviewPerformance.Run();return;}
 if(args.Contains("--targets")){TargetPickerChecks.Run(Check);Console.WriteLine($"{passed} target picker checks passed; no hardware operated.");return;}

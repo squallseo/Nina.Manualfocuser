@@ -1,0 +1,23 @@
+<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.FocusRoiOverlay"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables"
+ IsHitTestVisible="{Binding IsSelectingRoi}">
+ <Grid x:Name="PreviewSurface" Width="{Binding LiveDisplayBitmap.PixelWidth}" Height="{Binding LiveDisplayBitmap.PixelHeight}" Background="Transparent"
+  MouseLeftButtonDown="OnPreviewDown" MouseMove="OnPreviewMove" MouseLeftButtonUp="OnPreviewUp" LostMouseCapture="OnPreviewCaptureLost" SizeChanged="OnPreviewSizeChanged">
+  <Image x:Name="BitmapImage" Source="{Binding LiveDisplayBitmap}" Stretch="Fill" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="HighQuality">
+   <Image.Style><Style TargetType="Image"><Style.Triggers><DataTrigger Binding="{Binding HasDisplayInspectorTiles}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Image.Style>
+  </Image>
+  <ItemsControl x:Name="InspectorTiles" ItemsSource="{Binding LiveDisplayInspectorTiles}" Background="Black" IsHitTestVisible="False">
+   <ItemsControl.Style><Style TargetType="ItemsControl"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasDisplayInspectorTiles}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></ItemsControl.Style>
+   <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+   <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Canvas.Left" Value="{Binding X}"/><Setter Property="Canvas.Top" Value="{Binding Y}"/></Style></ItemsControl.ItemContainerStyle>
+   <ItemsControl.ItemTemplate><DataTemplate>
+    <Image Source="{Binding Bitmap}" Width="{Binding Bitmap.PixelWidth}" Height="{Binding Bitmap.PixelHeight}" Stretch="Fill" RenderOptions.BitmapScalingMode="{Binding Path=(RenderOptions.BitmapScalingMode), RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+   </DataTemplate></ItemsControl.ItemTemplate>
+  </ItemsControl>
+  <Image x:Name="PreviewImage" Source="{Binding LiveDisplayOverlay}" Stretch="Fill" IsHitTestVisible="False"/>
+  <local:FocusStarOverlay x:Name="StarBoxes" Boxes="{Binding HfrStarBoxes}" IsHitTestVisible="False" ClipToBounds="True"/>
+  <Canvas x:Name="RoiHandles" IsHitTestVisible="False"/>
+  <Canvas IsHitTestVisible="False"><Rectangle x:Name="RoiOutline" Visibility="Collapsed" Stroke="#FFD54F" StrokeThickness="3"/></Canvas>
+ </Grid>
+</UserControl>

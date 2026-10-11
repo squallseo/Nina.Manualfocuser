@@ -11,6 +11,8 @@
     <ProjectReference Include="../../ManualFocuser.csproj" AdditionalProperties="DeployPlugin=false" />
     <!-- Exercise the installed host's real HFR History view and view-model. -->
     <Reference Include="NINA"><HintPath>$(NinaInstallDir)\NINA.dll</HintPath></Reference>
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.72.1" />
+    <None Include="$(NinaInstallDir)\External\x64\Cfitsio\*.dll" Link="External\x64\Cfitsio\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NinaInstallDir)\External\x64\SOFA\*.dll" Link="External\x64\SOFA\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NinaInstallDir)\External\x64\NOVAS\*" Link="External\x64\NOVAS\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NinaInstallDir)\External\JPLEPH" Link="External\JPLEPH" CopyToOutputDirectory="PreserveNewest" />

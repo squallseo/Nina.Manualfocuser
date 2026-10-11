@@ -11,17 +11,17 @@ internal static partial class PreviewDisplayChecks
 {
     private static async Task VerifyInspectorDisplay(ManualFocuserDockableVM vm, Func<BitmapSource> output, Action<bool,string> check)
     {
-        const int w=1280,h=960,stride=1301,left=9,top=13;
-        var pixels=Enumerable.Repeat((ushort)65535,stride*1000).ToArray();
+        const int w=1280,h=1200,stride=1301,left=9,top=13;
+        var pixels=Enumerable.Repeat((ushort)65535,stride*1230).ToArray();
         for(int y=0;y<h;y++)for(int x=0;x<w;x++)pixels[(y+top)*stride+x+left]=(ushort)(1+(x*13+y*17)%60000);
         var original=(ushort[])pixels.Clone();
         var source=new FocusRawFrame(pixels,stride,left,top,w,h);
         var plan=FocusAberrationMosaic.Plan(w,h);
         var compact=FocusAberrationMosaic.Extract(source,plan);
-        check(plan.Tiles.Length==9 && plan.Size==320 && plan.Tiles[0].X==0 && plan.Tiles[0].Y==0 &&
-            plan.Tiles[4].X==480 && plan.Tiles[4].Y==320 && plan.Tiles[8].X==960 && plan.Tiles[8].Y==640,
+        check(plan.Tiles.Length==9 && plan.Size==400 && plan.Tiles[0].X==0 && plan.Tiles[0].Y==0 &&
+            plan.Tiles[4].X==440 && plan.Tiles[4].Y==400 && plan.Tiles[8].X==880 && plan.Tiles[8].Y==800,
             "Inspector samples sensor corners, edge centers and exact center at one pixel scale");
-        check(compact.Width==960 && compact.Height==960 && !compact.Pixels.Contains((ushort)65535),
+        check(compact.Width==1200 && compact.Height==1200 && !compact.Pixels.Contains((ushort)65535),
             "Only the nine scientific crops are copied, excluding padded host rows and columns");
         for(int i=0;i<9;i++) {
             var tile=plan.Tiles[i];int x=i%3*plan.Size,y=i/3*plan.Size;
@@ -46,36 +46,57 @@ internal static partial class PreviewDisplayChecks
         var camera=vm.CameraInfo;var type=typeof(ManualFocuserDockableVM);
         vm.UpdateDeviceInfo(new CameraInfo {Connected=true,DeviceId="Inspector.Display.Test",XSize=w,YSize=h});
         vm.PreviewCenterX=70;vm.PreviewCenterY=30;vm.PreviewRoiPreset="512";vm.AnalyzeBahtinov=true;
-        vm.PreviewRoiPreset="Inspector";
-        check(vm.IsAberrationInspector && vm.PreviewRoiPreset=="Inspector" && vm.PreviewRoiWidth==512 && vm.PreviewRoiHeight==512 &&
-            vm.PreviewRoiRectangle==new FocusRoi.Rectangle(0,0,w,h) && vm.PreviewCenterX==70 && vm.PreviewCenterY==30,
-            "Inspector requests the entire sensor without discarding the previous single-star ROI and anchor");
-        check(!vm.CanUseBahtinovOverlay && vm.LiveHfrText.StartsWith("Center HFR") && vm.RoiLocationText.Contains("sensor center"),
-            "Inspector labels sensor-center HFR and disables single-star Bahtinov overlay");
+        var renderRaw=type.GetMethod("RenderRawFocusPreview",BindingFlags.Instance|BindingFlags.NonPublic);
+        type.GetProperty(nameof(vm.FocusPreviewImage)).SetValue(vm,renderRaw.Invoke(vm,new object[]{source,null,null}));
+        var roiBefore=vm.PreviewRoiRectangle;
+        vm.IsAberrationInspector=true;
+        check(vm.IsAberrationInspector && vm.PreviewRoiPreset=="512" && vm.PreviewRoiWidth==512 && vm.PreviewRoiHeight==512 &&
+            vm.PreviewRoiRectangle==roiBefore && vm.PreviewCenterX==70 && vm.PreviewCenterY==30,
+            "Inspector display leaves the capture ROI and anchor unchanged");
+        check(!vm.CanUseBahtinovOverlay && vm.LiveHfrText.StartsWith("Multi-star HFR"),
+            "Inspector keeps the multi-star HFR metric and disables its display-only Bahtinov overlay");
         var render=type.GetMethod("RenderAberrationPreview",BindingFlags.Instance|BindingFlags.NonPublic);
         var preview=(ImageSource)render.Invoke(vm,new object[]{source,null});
-        check(preview.IsFrozen && preview.Width==plan.Width && preview.Height==plan.Height && preview is BitmapSource bitmap && bitmap.Format==PixelFormats.Bgr32,
+        check(preview.IsFrozen && preview.Width==plan.Width && preview.Height==plan.Height && preview is BitmapSource bitmap && bitmap.Format==PixelFormats.Pbgra32,
             "Inspector is a compact square bitmap with no text overlays or label rows");
-        foreach(string field in new[]{"assistRunning","liveImageOutputActive"})type.GetField(field,BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,true);
-        type.GetField("lastImageOutput",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,0L);
+        type.GetField("assistRunning",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,true);
         type.GetProperty(nameof(vm.FocusPreviewImage)).SetValue(vm,preview);
-        var published=output();
-        check(published.IsFrozen && published.PixelWidth==plan.Width && published.PixelHeight==plan.Height && published.Format==PixelFormats.Bgr32 && ReferenceEquals(published,preview),
-            "Main NINA Image shares the inspector bitmap without extra overlay rasterization");
+        var published=(BitmapSource)vm.FocusPreviewImage;
+        check(published.IsFrozen && published.PixelWidth==plan.Width && published.PixelHeight==plan.Height && published.Format==PixelFormats.Pbgra32 && ReferenceEquals(published,preview),
+            "Private inspector shares its bitmap without extra overlay rasterization");
+        check(output() == null, "Inspector never replaces the native captured image");
         var channels=new byte[plan.Width*plan.Height*4];published.CopyPixels(channels,plan.Width*4,0);
-        check(Enumerable.Range(0,display.Length).All(i=>channels[i*4]==display[i] && channels[i*4+1]==display[i] && channels[i*4+2]==display[i]),
+        check(Enumerable.Range(0,display.Length).All(i=>channels[i*4]==display[i] && channels[i*4+1]==display[i] && channels[i*4+2]==display[i] && channels[i*4+3]==255),
             "Every published RGB channel preserves all nine stretched tiles including the entire right column");
         vm.PreviewRoiPreset="50%";
-        check(vm.IsAberrationInspector,"Inspector mode cannot change during live capture");
+        check(vm.IsAberrationInspector,"Capture ROI remains locked during live capture without changing inspector display");
         type.GetProperty(nameof(vm.LiveHfr)).SetValue(vm,2.2);
         vm.PreviewStretchStrength=.5;await Task.Delay(300);
         check(!ReferenceEquals(vm.FocusPreviewImage,preview) && vm.FocusPreviewImage.Width==plan.Width && vm.FocusPreviewImage.Height==plan.Height &&
             vm.LiveHfr==2.2 && pixels.SequenceEqual(original),
             "Inspector stretch rerenders only the mosaic and leaves HFR/raw data unchanged");
-        foreach(string field in new[]{"assistRunning","liveImageOutputActive"})type.GetField(field,BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,false);
+        type.GetField("assistRunning",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,false);
         vm.PreviewRoiPreset="512";
-        check(!vm.IsAberrationInspector && vm.CanUseBahtinovOverlay && vm.PreviewRoiPreset=="512" && vm.PreviewCenterX==70 && vm.PreviewCenterY==30,
-            "Choosing a normal ROI exits Inspector even when its saved dimensions already match");
+        check(vm.IsAberrationInspector,"Selecting a capture ROI does not change the independent inspector display toggle");
+        vm.IsAberrationInspector=false; await Task.Delay(250);
+        check(!vm.IsAberrationInspector && vm.CanUseBahtinovOverlay && vm.FocusPreviewImage.Width==w && vm.FocusPreviewImage.Height==h && vm.PreviewCenterX==70 && vm.PreviewCenterY==30,
+            "Turning inspector off restores the original frame without recapture or changing its ROI");
+        vm.IsAberrationInspector=true;
+        vm.FocusMode="Live";
+        check(!vm.IsAberrationInspector && !vm.CanInspectFocusImage,"Entering Live mode with a 512-pixel ROI automatically disables Inspector");
+        vm.PreviewRoiPreset="1024";vm.IsAberrationInspector=true;
+        check(!vm.IsAberrationInspector && !vm.CanInspectFocusImage,"The 1024-pixel ROI boundary cannot enable Inspector even with a larger cached source");
+        vm.PreviewRoiPreset="100%";vm.IsAberrationInspector=true;
+        check(vm.CanInspectFocusImage && vm.IsAberrationInspector,"A live ROI larger than 1024 in both dimensions enables Inspector");
+        await Task.Delay(250);
+        vm.PreviewRoiPreset="1024";
+        await Task.Delay(250);
+        check(!vm.IsAberrationInspector && vm.FocusPreviewImage.Width==w,"Reducing the ROI turns Inspector off and restores the normal frame");
+        vm.FocusMode="Manual";
+        var small=new FocusRawFrame(new ushort[1024*1024],1024,0,0,1024,1024);
+        type.GetProperty(nameof(vm.FocusPreviewImage)).SetValue(vm,renderRaw.Invoke(vm,new object[]{small,null,null}));
+        vm.IsAberrationInspector=true;
+        check(!vm.CanInspectFocusImage && !vm.IsAberrationInspector,"An actual 1024-pixel source also disables Inspector in Manual mode");
         vm.AnalyzeBahtinov=false;vm.UpdateDeviceInfo(camera);vm.PreviewCenterX=50;vm.PreviewCenterY=50;
         vm.ResetPreviewStretchCommand.Execute(null);await Task.Delay(250);
         SaveInspectorExample(vm,render);

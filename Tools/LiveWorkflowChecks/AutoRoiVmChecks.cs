@@ -71,13 +71,14 @@ internal static class AutoRoiVmChecks {
         var settings=settingsType.GetProperty("Default").GetValue(null);var streaming=settingsType.GetProperty("UseFocusStreaming");
         object previousStreaming=streaming.GetValue(settings);streaming.SetValue(settings,false);
         try {
-            using(vm=new ManualFocuserDockableVM(profiles,camera,imaging,wheel,focuser,mount,guider,null,null,null,status)) {
+            using(vm=new ManualFocuserDockableVM(profiles,camera,imaging,wheel,focuser,mount,guider,null,null,null,status,new CheckHfrAnalyzer())) {
                 typeof(ManualFocuserDockableVM).GetProperty(nameof(vm.CameraInfo)).SetValue(vm,cameraInfo);
                 typeof(ManualFocuserDockableVM).GetProperty(nameof(vm.FocuserInfo)).SetValue(vm,focuserInfo);
                 Task<int> Invoke(string name,params object[] args)=>(Task<int>)typeof(ManualFocuserDockableVM).GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic).Invoke(vm,args);
                 async Task<bool> Reject(string name,params object[] args){try{await Invoke(name,args);return false;}catch(InvalidOperationException){return true;}}
                 vm.PreviewCenterX=25;vm.PreviewCenterY=75;
-                vm.PreviewRoiPreset="Inspector";
+                vm.FocusMode="Live";
+                vm.IsAberrationInspector=true;
                 check(await Invoke("SelectAutoRoiAsync")==1 && captures==1 && moves==0,"Auto ROI button selects from one scout exposure without starting focus/motor motion");
                 var selected=vm.PreviewRoiRectangle;
                 check(!vm.IsAberrationInspector && vm.CanUseBahtinovOverlay,"Successful Auto ROI leaves Inspector and restores single-star ROI controls");

@@ -10,17 +10,18 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
     public partial class ManualFocuserDockableVM
     {
         private int previewRoiWidth = 512, previewRoiHeight = 512;
+        private bool defaultRoiPending = true;
         private int overviewSensorWidth, overviewSensorHeight, overviewWidth, overviewHeight;
         private double[] overviewPixels;
         private static readonly int[] sensorRoiPercentages = { 50, 67, 100 };
         public bool HasRoiSensorDimensions => SelectionSensorWidth >= 32 && SelectionSensorHeight >= 32;
-        public int PreviewRoiWidth { get => previewRoiWidth; set { previewRoiWidth = Math.Clamp(value / 4 * 4, 32, SelectionSensorWidth >= 32 ? SelectionSensorWidth : int.MaxValue); ResetSharedFocusMeasurements(); RaisePropertyChanged(); RaisePropertyChanged(nameof(PreviewRoiPreset)); UpdateRoiSelection(); } }
-        public int PreviewRoiHeight { get => previewRoiHeight; set { previewRoiHeight = Math.Clamp(value / 4 * 4, 32, SelectionSensorHeight >= 32 ? SelectionSensorHeight : int.MaxValue); ResetSharedFocusMeasurements(); RaisePropertyChanged(); RaisePropertyChanged(nameof(PreviewRoiPreset)); UpdateRoiSelection(); } }
+        public int PreviewRoiWidth { get => previewRoiWidth; set { defaultRoiPending = false; previewRoiWidth = Math.Clamp(value / 4 * 4, 32, SelectionSensorWidth >= 32 ? SelectionSensorWidth : int.MaxValue); ResetSharedFocusMeasurements(); RaisePropertyChanged(); RaisePropertyChanged(nameof(PreviewRoiPreset)); UpdateRoiSelection(); } }
+        public int PreviewRoiHeight { get => previewRoiHeight; set { defaultRoiPending = false; previewRoiHeight = Math.Clamp(value / 4 * 4, 32, SelectionSensorHeight >= 32 ? SelectionSensorHeight : int.MaxValue); ResetSharedFocusMeasurements(); RaisePropertyChanged(); RaisePropertyChanged(nameof(PreviewRoiPreset)); UpdateRoiSelection(); } }
         public string PreviewRoiPreset
         {
             get
             {
-                if (IsAberrationInspector) return "Inspector";
+                if (defaultRoiPending) return "67%";
                 if (HasRoiSensorDimensions)
                     foreach (int percentage in sensorRoiPercentages)
                         if (SensorRoiSize(percentage) == (previewRoiWidth, previewRoiHeight)) return percentage + "%";
@@ -30,12 +31,6 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             set
             {
                 if (!CanConfigureLive) return;
-                if (value == "Inspector")
-                {
-                    if (HasRoiSensorDimensions && SetAberrationInspector(true))
-                    { IsSelectingRoi = false; ResetSharedFocusMeasurements(); UpdateRoiSelection(); }
-                    return;
-                }
                 int width, height;
                 if (value?.EndsWith("%", StringComparison.Ordinal) == true)
                 {
@@ -49,8 +44,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                     height = Math.Min(size, HasRoiSensorDimensions ? SelectionSensorHeight : size);
                 }
                 else return;
-                bool modeChanged = SetAberrationInspector(false);
-                if ((previewRoiWidth, previewRoiHeight) == (width, height) && !modeChanged) return;
+                defaultRoiPending = false;
+                if ((previewRoiWidth, previewRoiHeight) == (width, height)) return;
                 // Commit both dimensions together: intermediate square crops can
                 // otherwise reset the bound preset and render the overview twice.
                 previewRoiWidth = width; previewRoiHeight = height;
@@ -59,6 +54,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 RaisePropertyChanged(); UpdateRoiSelection();
             }
         }
+        private void ApplyDefaultPreviewRoi() {
+            // Percent presets need the connected camera's sensor dimensions.
+            // Apply once, so subsequent device-info updates preserve user edits.
+            if (defaultRoiPending && HasRoiSensorDimensions && CanConfigureLive) PreviewRoiPreset = "67%";
+        }
         private (int Width, int Height) SensorRoiSize(int percentage) =>
             (Math.Max(32, (int)((long)SelectionSensorWidth * percentage / 100 / 4 * 4)),
              Math.Max(32, (int)((long)SelectionSensorHeight * percentage / 100 / 4 * 4)));
@@ -66,8 +66,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         public int SelectionSensorHeight => overviewSensorHeight > 0 ? overviewSensorHeight : CameraInfo?.YSize ?? 0;
         public FocusRoi.Rectangle PreviewRoiRectangle => SelectionSensorWidth >= 32 && SelectionSensorHeight >= 32
             ? FocusCameraSupport.FitRoi(CameraInfo?.DeviceId, SelectionSensorWidth, SelectionSensorHeight,
-                IsAberrationInspector ? SelectionSensorWidth : PreviewRoiWidth, IsAberrationInspector ? SelectionSensorHeight : PreviewRoiHeight,
-                IsAberrationInspector ? 50 : PreviewCenterX, IsAberrationInspector ? 50 : PreviewCenterY) : default;
+                PreviewRoiWidth, PreviewRoiHeight, PreviewCenterX, PreviewCenterY) : default;
         public ImageSource RoiSelectionPreview { get; private set; }
         public ICommand SetRoiSizeCommand { get; private set; }
         public ICommand ConfirmRoiCommand { get; private set; }
@@ -184,6 +183,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         }
         private void UpdateRoiSelection()
         {
+            UpdateInspectorAvailability();
             RaisePropertyChanged(nameof(RoiLocationText)); RaisePropertyChanged(nameof(PreviewRoiRectangle));
             if (IsAberrationInspector || overviewPixels == null || overviewWidth < 1) return;
             var roi = PreviewRoiRectangle;
