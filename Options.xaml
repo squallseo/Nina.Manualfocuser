@@ -8,6 +8,9 @@
             <StackPanel Margin="6" HorizontalAlignment="Left" MinWidth="320">
 
                 <!-- Header -->
+                <TextBlock Text="Live focusing" FontWeight="Bold" Margin="5" />
+                <CheckBox Content="Use continuous camera streaming" IsChecked="{Binding UseFocusStreaming}" Margin="5" />
+                <CheckBox Content="Enable diagnostic recording" IsChecked="{Binding EnableFocusDiagnostics}" Margin="5" />
                 <StackPanel Orientation="Horizontal">
                     <Path
                         Width="25"

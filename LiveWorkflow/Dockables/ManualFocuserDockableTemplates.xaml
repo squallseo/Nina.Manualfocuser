@@ -1,0 +1,18 @@
+<ResourceDictionary
+    x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableTemplates"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables">
+
+    <!-- NINA locates the dockable using its fully qualified name and _Dockable suffix. -->
+    <DataTemplate x:Key="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableVM_Dockable">
+        <local:ManualFocuserDockableView/>
+    </DataTemplate>
+
+    <!-- Theme-colored play triangle, open focus ring and star. Matches Images/live-focus-icon.svg. -->
+    <GeometryGroup x:Key="Cwseo.NINA.ManualFocuser_SVG">
+        <PathGeometry Figures="M18.104 5.724 A12 12 0 1 0 24.875 11.929 L22.428 13.070 A9.3 9.3 0 1 1 17.181 8.261 Z"/>
+        <PathGeometry Figures="M10.5 11 L20 17 L10.5 23 Z"/>
+        <PathGeometry Figures="M25 0 C25.6 4.3 26.4 5.1 30 6 C26.4 6.9 25.6 7.7 25 12 C24.4 7.7 23.6 6.9 20 6 C23.6 5.1 24.4 4.3 25 0 Z"/>
+    </GeometryGroup>
+</ResourceDictionary>

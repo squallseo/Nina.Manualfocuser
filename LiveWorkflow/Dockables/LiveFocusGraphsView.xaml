@@ -1,0 +1,27 @@
+<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.LiveFocusGraphsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:oxy="clr-namespace:OxyPlot.Wpf;assembly=OxyPlot.Contrib.Wpf" xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base" Foreground="{DynamicResource PrimaryBrush}" FontFamily="Segoe UI" FontSize="11">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <wpfutil:SharedResourceDictionary Source="/NINA.WPF.Base;component/Resources/StaticResources/Brushes.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </UserControl.Resources>
+  <Border x:Name="ProfileCard" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="8">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <TextBlock Text="Star profile" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4" />
+      <oxy:Plot Grid.Row="1" Background="{StaticResource BackgroundBrush}" PlotAreaBackground="{StaticResource BackgroundBrush}">
+        <oxy:Plot.Axes>
+          <oxy:LinearAxis Position="Bottom" Title="Distance (px)" FontSize="10" TitleFontSize="10" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" TitleColor="{Binding Color, Source={StaticResource PrimaryBrush}}" />
+          <oxy:LinearAxis Position="Left" Minimum="0" Maximum="1.1" FontSize="10" TextColor="{Binding Color, Source={StaticResource PrimaryBrush}}" />
+        </oxy:Plot.Axes>
+        <oxy:Plot.Series>
+          <oxy:LineSeries ItemsSource="{Binding LiveStarProfile}" DataFieldX="X" DataFieldY="Y" Color="{Binding Color, Source={StaticResource PrimaryBrush}}" />
+        </oxy:Plot.Series>
+      </oxy:Plot>
+    </Grid>
+  </Border>
+</UserControl>

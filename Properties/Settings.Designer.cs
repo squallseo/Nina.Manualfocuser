@@ -14,6 +14,18 @@ namespace Cwseo.NINA.ManualFocuser.Properties {
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.14.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool UseFocusStreaming {
+            get => (bool)this[nameof(UseFocusStreaming)];
+            set => this[nameof(UseFocusStreaming)] = value;
+        }
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool EnableFocusDiagnostics {
+            get => (bool)this[nameof(EnableFocusDiagnostics)];
+            set => this[nameof(EnableFocusDiagnostics)] = value;
+        }
 
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
 

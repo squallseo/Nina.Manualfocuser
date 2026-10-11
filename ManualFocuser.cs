@@ -33,6 +33,14 @@ namespace Cwseo.NINA.ManualFocuser {
     public class ManualFocuser : PluginBase {
         private string lensesConfigPath { get => Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "lenses.json"); }
         private Integration integration;
+        public bool UseFocusStreaming {
+            get => Settings.Default.UseFocusStreaming;
+            set { Settings.Default.UseFocusStreaming = value; CoreUtil.SaveSettings(Settings.Default); }
+        }
+        public bool EnableFocusDiagnostics {
+            get => Settings.Default.EnableFocusDiagnostics;
+            set { Settings.Default.EnableFocusDiagnostics = value; CoreUtil.SaveSettings(Settings.Default); }
+        }
 		private static ManualFocuser instance;
 
         private readonly IPluginOptionsAccessor pluginSettings;

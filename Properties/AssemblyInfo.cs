@@ -7,13 +7,14 @@ using System.Runtime.InteropServices;
 
 // [MANDATORY] The assembly versioning
 //Should be incremented for each new release build of a plugin
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("windows7.0")]
 
 // [MANDATORY] The name of your plugin
 [assembly: AssemblyTitle("Manual Focuser")]
 // [MANDATORY] A short description of your plugin
-[assembly: AssemblyDescription("Find focus point with interactive manual focus steps")]
+[assembly: AssemblyDescription("Manual live focusing with ROI HFR history, a 3x3 sensor inspector and target selection")]
 
 // The following attributes are not required for the plugin per se, but are required by the official manifest meta data
 
