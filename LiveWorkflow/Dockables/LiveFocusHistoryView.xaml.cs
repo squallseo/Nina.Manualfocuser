@@ -8,7 +8,8 @@ using OxyPlot;
 namespace Cwseo.NINA.ManualFocuser.Dockables {
     public partial class LiveFocusHistoryView : UserControl {
         private readonly OxyPlot.Wpf.ArrowAnnotation movement = new() {
-            Color = Colors.LightSkyBlue, StrokeThickness = 2, HeadLength = 6, HeadWidth = 4
+            Color = Colors.LightSkyBlue, StrokeThickness = 2, HeadLength = 6, HeadWidth = 4,
+            Layer = OxyPlot.Annotations.AnnotationLayer.BelowSeries
         };
         private readonly OxyPlot.Wpf.PointAnnotation minimum = new() {
             Fill = Colors.Red, Shape = MarkerType.Triangle, Size = 7,
@@ -35,6 +36,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private void OnHistoryChanged(object sender, PropertyChangedEventArgs e) => UpdateAnnotations();
         private void UpdateAnnotations() {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(UpdateAnnotations)); return; }
+            var measurements = (OxyPlot.Wpf.LineSeries)HistoryPlot.Series[0];
+            bool manual = session?.IsManualFocus == true;
+            double markerSize = manual ? 4.5 : 1.5;
+            if (measurements.MarkerSize != markerSize) {
+                measurements.MarkerSize = markerSize;
+                measurements.MarkerStroke = manual ? Color.FromRgb(27,29,32) : Colors.Transparent;
+                measurements.MarkerStrokeThickness = manual ? 1.2 : 0;
+            }
             if (session?.IsManualFocus != true && HistoryPlot.Annotations.Count == 0) return;
             HistoryPlot.Annotations.Clear();
             if (session?.IsManualFocus != true) return;

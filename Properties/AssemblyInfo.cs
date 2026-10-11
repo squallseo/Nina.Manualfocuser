@@ -14,7 +14,7 @@ using System.Runtime.InteropServices;
 // [MANDATORY] The name of your plugin
 [assembly: AssemblyTitle("Manual Focuser")]
 // [MANDATORY] A short description of your plugin
-[assembly: AssemblyDescription("Manual live focusing with ROI HFR history, a 3x3 sensor inspector and target selection")]
+[assembly: AssemblyDescription("Manual and live focusing with multi-star HFR, ROI preview and a 3x3 aberration inspector")]
 
 // The following attributes are not required for the plugin per se, but are required by the official manifest meta data
 
@@ -40,7 +40,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyMetadata("Homepage", "https://cafe.naver.com/skyguide")]
 
 //[Optional] Common tags that quickly describe your plugin
-[assembly: AssemblyMetadata("Tags", "Focuser, Manual, Step, Direct input, Interactive")]
+[assembly: AssemblyMetadata("Tags", "Focuser, Manual, Live, HFR, ROI, Interactive")]
 
 //[Optional] A link that will show a log of all changes in between your plugin's versions
 [assembly: AssemblyMetadata("ChangelogURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/CHANGELOG.md")]
@@ -48,21 +48,17 @@ using System.Runtime.InteropServices;
 //[Optional] The url to a featured logo that will be displayed in the plugin list next to the name
 [assembly: AssemblyMetadata("FeaturedImageURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/logo.png?raw=true")]
 //[Optional] A url to an example screenshot of your plugin in action
-[assembly: AssemblyMetadata("ScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/screenshot.png?raw=true")]
+[assembly: AssemblyMetadata("ScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/manual-focuser-manual.png?raw=true")]
 //[Optional] An additional url to an example example screenshot of your plugin in action
-[assembly: AssemblyMetadata("AltScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/screenshot_alt.png?raw=true")]
+[assembly: AssemblyMetadata("AltScreenshotURL", "https://github.com/squallseo/Nina.Manualfocuser/blob/master/Images/manual-focuser-controls-live.png?raw=true")]
 //[Optional] An in-depth description of your plugin
-[assembly: AssemblyMetadata("LongDescription", @"NINA’s built-in autofocus is already fast and good enough, but it has a drawback:
+[assembly: AssemblyMetadata("LongDescription", @"Adjust focus in Manual Focus or Live Focus mode with three independently dockable panels: MF Image, MF Controls and MF HFR.
 
-the user has to judge and manually enter an appropriate autofocus step size.
+Manual Focus captures after focuser movement using NINA's autofocus settings and plots HFR against focuser position. Live Focus offers continuous camera preview, adjustable exposure and ROI, and a rolling 120-second HFR graph.
 
-Also, since it searches only based on star HFR, when trying to find a truly better focus point,
+Multi-star HFR uses NINA's selected autofocus star detector, with optional same-star tracking and star boxes. Image controls include zoom, rotation, horizontal flip, Auto Stretch and a 3x3 aberration inspector. Sync to Image sends the original frame and raw data to NINA's native viewer for plate solving and further analysis.
 
-the user ends up fine-tuning by checking additional cues such as star shapes near the edges, spikes, and other details.
-
-I want to create an environment that makes this process more convenient,
-
-and further, to build the foundation for eventually automating it.")]
+Go to target provides bright-star selection, Moon and planet targets, and deep-sky search with Slew or plate-solve centering.")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from

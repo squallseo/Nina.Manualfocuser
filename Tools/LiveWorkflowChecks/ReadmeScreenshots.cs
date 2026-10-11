@@ -109,7 +109,7 @@ internal static class ReadmeScreenshots {
         Grid.SetColumn(controlView,1);Grid.SetRowSpan(controlView,2);Grid.SetRow(historyView,1);
         root.Children.Add(Panel("MF Image",imageView));root.Children.Add(Panel("MF Controls",controlView,1,2));
         root.Children.Add(Panel("MF HFR",historyView,0,1,1));
-        async Task Save(string name) {
+        async Task Save(string name,string controlsName=null) {
             root.Measure(new Size(1725,1050));root.Arrange(new Rect(0,0,1725,1050));root.UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);root.UpdateLayout();
             var viewer=imageView.FindName("FocusImageView") as NINA.WPF.Base.View.ImageView ??
@@ -120,8 +120,16 @@ internal static class ReadmeScreenshots {
             var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(screenshot));
             using var stream=File.Create(Path.Combine(output,name));encoder.Save(stream);
             Console.WriteLine("Saved "+Path.Combine(output,name));
+            if(controlsName!=null) {
+                var controls=(StackPanel)controlView.FindName("ControlsPanel");
+                var bottom=controls.TransformToAncestor(root).Transform(new Point(0,controls.DesiredSize.Height)).Y;
+                var cropped=new CroppedBitmap(screenshot,new Int32Rect(1335,0,390,Math.Min(1050,(int)Math.Ceiling(bottom+8))));
+                var controlEncoder=new PngBitmapEncoder();controlEncoder.Frames.Add(BitmapFrame.Create(cropped));
+                using var controlStream=File.Create(Path.Combine(output,controlsName));controlEncoder.Save(controlStream);
+                Console.WriteLine("Saved "+Path.Combine(output,controlsName));
+            }
         }
-        await Save("manual-focuser-live.png");
+        await Save("manual-focuser-live.png","manual-focuser-controls-live.png");
         vm.IsAberrationInspector=true;await Task.Delay(300);
         await Save("manual-focuser-inspector.png");
         vm.IsAberrationInspector=false;vm.FocusMode="Manual";vm.TrackFocusStars=false;vm.ShowFocusHfr=true;
@@ -137,7 +145,7 @@ internal static class ReadmeScreenshots {
         typeof(ManualFocuserDockableVM).GetProperty(nameof(vm.LiveHfrStarCount)).SetValue(vm,selectedMetric.Stars);
         typeof(ManualFocuserDockableVM).GetMethod("RaisePropertyChanged",BindingFlags.Instance|BindingFlags.NonPublic)
             .Invoke(vm,new object[]{nameof(vm.LiveHfrText)});
-        await Task.Delay(300);await Save("manual-focuser-manual.png");
+        await Task.Delay(300);await Save("manual-focuser-manual.png","manual-focuser-controls-manual.png");
     }
     private static DockPanel Panel(string title,FrameworkElement view,int column=0,int rowSpan=1,int row=0) {
         var panel=new DockPanel{LastChildFill=true,Margin=new Thickness(2)};
