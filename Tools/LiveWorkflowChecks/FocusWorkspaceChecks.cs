@@ -211,6 +211,7 @@ internal static class FocusWorkspaceChecks {
             check(lastSequence.ExposureTime==3 && lastSequence.Binning.X==2 && !lastSequence.EnableSubSample,"Manual capture uses NINA autofocus exposure/binning and full source, ignoring live ROI settings");
             check(vm.Title=="MF Controls" && imagePanel.Title=="MF Image" && historyPanel.Title=="MF HFR","All three panel titles retain the shared MF prefix");
             await FocusImageToolbarChecks.Run(vm,check);
+            await ViewerDiagnosticsChecks.Run(vm,host,check);
             var runArgs=Environment.GetCommandLineArgs();
             if(runArgs.Contains("--inspector-window")) await InspectorSourceChecks.Show(vm,runArgs[Array.IndexOf(runArgs,"--inspector-window")+1]);
             if(runArgs.Contains("--inspector-files")) await InspectorSourceChecks.Show(vm,runArgs[Array.IndexOf(runArgs,"--inspector-files")+1],check);

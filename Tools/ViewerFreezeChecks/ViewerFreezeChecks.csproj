@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ViewerFreezeChecks</AssemblyName>
+    <NinaHost Condition="'$(NinaHost)'==''">../../bin/issue-2-nightly/host-3.3.0.1067</NinaHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(NinaHost)/NINA*.dll"><Private>false</Private></Reference>
+    <Reference Include="$(NinaHost)/AvalonDock.dll"><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

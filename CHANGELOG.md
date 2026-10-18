@@ -1,4 +1,9 @@
 # Manual Focuser
+## 1.2.0.1 (2026-10-18)
+- Fix image preview freezes caused by diagnostic snapshots of live WPF viewers (issue #2).
+- Observe only MF Image, remove global host-viewer and keyboard hooks, and save source bitmaps without rendering viewer controls.
+- Retain bounded pixel/layout diagnostics for aberration inspection, including hidden or transparent tile containers.
+
 ## 1.2.0.0 (2026-10-12)
 - Add Manual Focus and Live Focus modes with one MF toolbar icon and three independently dockable panels.
 - Capture after focuser movement using NINA autofocus settings; plot HFR by focus position with movement arrows and a labeled minimum.

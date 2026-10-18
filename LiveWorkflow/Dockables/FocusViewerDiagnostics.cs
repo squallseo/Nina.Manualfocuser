@@ -15,12 +15,11 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NINA.Core.Utility;
-using NINA.Image.Interfaces;
 using ImageView = NINA.WPF.Base.View.ImageView;
 
 namespace Cwseo.NINA.ManualFocuser.Dockables {
-    // Always-on, bounded trace for the actual host controls. No raw FITS archive,
-    // no setting to remember to enable, and all file writes happen off the UI thread.
+    // Bounded trace for MF Image only. Capture bitmap data and layout metadata,
+    // never render a live WPF visual: doing so can freeze the host's image display.
     internal sealed class FocusViewerDiagnostics {
         internal static readonly string RootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NINA", "ManualFocuser", "ViewerDiagnostics");
@@ -37,7 +36,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private DateTime lastSnapshot;
         private int lastAnomalyKind;
         private static readonly JsonSerializerOptions jsonOptions = new() { NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals };
-        private sealed record WriteJob(string Json, BitmapSource Source, BitmapSource SoftwareView);
+        private sealed record WriteJob(string Json, BitmapSource Source);
         private static readonly Channel<WriteJob> writes = Channel.CreateBounded<WriteJob>(new BoundedChannelOptions(64) {
             FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true
         });
@@ -56,26 +55,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     return;
                 }
                 if (initialized || application.Dispatcher.HasShutdownStarted) return;
-                EventManager.RegisterClassHandler(typeof(Window), UIElement.PreviewKeyDownEvent, new KeyEventHandler((_, e) => {
-                    if (e.Key != Key.F12 || Keyboard.Modifiers != (ModifierKeys.Control | ModifierKeys.Shift)) return;
-                    foreach (var pair in observers) {
-                        if (!pair.Value.attached || !pair.Key.IsVisible) continue;
-                        pair.Value.Queue("manual-snapshot", true); pair.Value.lastSnapshot = DateTime.MinValue; pair.Value.Capture();
-                    }
-                    e.Handled = true;
-                }));
                 application.Exit += (_, _) => {
                     writes.Writer.TryComplete(); writer.Wait(TimeSpan.FromMilliseconds(500));
                 };
-                EventManager.RegisterClassHandler(typeof(ImageView), FrameworkElement.LoadedEvent, new RoutedEventHandler((sender, _) => Observe((ImageView)sender)));
                 initialized = true;
-                Logger.Info("MF viewer diagnostics enabled: " + DirectoryPath + "; module=" + typeof(FocusViewerDiagnostics).Assembly.ManifestModule.ModuleVersionId);
-                application.Dispatcher.BeginInvoke(new Action(() => {
-                    try {
-                        foreach (Window window in application.Windows)
-                            foreach (var view in MainImageRoiEditor.Descendants(window).OfType<ImageView>()) Observe(view);
-                    } catch (Exception error) { Logger.Error("MF viewer diagnostics discovery failed", error); }
-                }), DispatcherPriority.ContextIdle);
+                Logger.Info("MF Image diagnostics enabled (source bitmaps only): " + DirectoryPath + "; module=" + typeof(FocusViewerDiagnostics).Assembly.ManifestModule.ModuleVersionId);
             } catch (Exception error) {
                 // Diagnostics must never prevent the focusing plugin from loading.
                 Logger.Error("MF viewer diagnostics initialization failed", error);
@@ -89,6 +73,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         viewer.Dispatcher.BeginInvoke(new Action(() => Observe(viewer)), DispatcherPriority.ContextIdle);
                     return;
                 }
+                if (!IsOwnedViewer(viewer)) return;
                 observers.GetValue(viewer, v => new FocusViewerDiagnostics(v)).Attach();
             } catch (Exception error) { Logger.Error("MF viewer diagnostics attachment failed", error); }
         }
@@ -104,10 +89,11 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             heartbeat.Stop();
             viewer.Loaded += (_, _) => Attach();
             viewer.Unloaded += (_, _) => Detach();
-            viewer.DataContextChanged += (_, _) => { if (attached) { SubscribeContext(); Queue("context", true); } else Attach(); };
+            viewer.DataContextChanged += (_, _) => { Detach(); Attach(); };
         }
-        private bool IsRelevant => viewer.DataContext is ManualFocuserDockableVM || viewer.DataContext?.GetType().Name == "ImageControlVM";
-        private bool IsInspector => viewer.DataContext is ManualFocuserDockableVM vm ? vm.HasDisplayInspectorTiles : Read(viewer.DataContext, "ShowAberration") is true;
+        private static bool IsOwnedViewer(ImageView view) => view.DataContext is ManualFocuserDockableVM && view.ImageAreaContent is FocusRoiOverlay;
+        private bool IsRelevant => IsOwnedViewer(viewer);
+        private bool IsInspector => viewer.DataContext is ManualFocuserDockableVM vm && vm.HasDisplayInspectorTiles;
         private void Attach() {
             if (attached || !IsRelevant) return;
             attached = true; SubscribeContext();
@@ -128,7 +114,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             viewer.PreviewKeyDown -= OnKey;
             if (viewer.FindName("PART_ScaleTransform") is ScaleTransform zoom) zoom.Changed -= OnZoom;
             if (viewer.FindName("PART_ScrollViewer") is ScrollViewer scroll) scroll.ScrollChanged -= OnScroll;
-            debounce.Stop(); heartbeat.Stop(); reasons.Clear();
+            debounce.Stop(); heartbeat.Stop(); reasons.Clear(); wantSnapshot = false;
         }
         private void SubscribeContext() {
             if (context != null) PropertyChangedEventManager.RemoveHandler(context, OnProperty, string.Empty);
@@ -136,7 +122,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             if (context != null) PropertyChangedEventManager.AddHandler(context, OnProperty, string.Empty);
         }
         private void OnProperty(object sender, PropertyChangedEventArgs e) {
-            if (e.PropertyName is "IsAberrationInspector" or "ShowAberration" or "ImageRotation" or "ImageFlip" or "PreviewAutoStretch") Queue(e.PropertyName, true);
+            if (e.PropertyName is "IsAberrationInspector" or "ImageRotation" or "ImageFlip" or "PreviewAutoStretch") Queue(e.PropertyName, true);
             // Frame arrivals must not keep restarting the debounce during streaming.
         }
         private void OnClick(object sender, RoutedEventArgs e) => Queue("button:" + (e.OriginalSource as FrameworkElement)?.Name, true);
@@ -152,14 +138,14 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         }
         private void Queue(string reason, bool snapshot) {
             if (!viewer.Dispatcher.CheckAccess()) { viewer.Dispatcher.BeginInvoke(new Action(() => Queue(reason, snapshot))); return; }
+            if (!attached || !IsRelevant) return;
             reasons.Add(reason); wantSnapshot |= snapshot;
             // Keep a timestamped action history even when a burst is coalesced.
             Enqueue(new { Utc = DateTime.UtcNow, Event = "action", Viewer = ViewerName, Reason = reason, Inspector = IsInspector,
-                Zoom = (viewer.FindName("PART_ScaleTransform") as ScaleTransform)?.ScaleX }, null, null);
+                Zoom = (viewer.FindName("PART_ScaleTransform") as ScaleTransform)?.ScaleX }, null);
             if (!debounce.IsEnabled) debounce.Start();
         }
-        private string ViewerName => viewer.DataContext is ManualFocuserDockableVM ? "MF Image" : "NINA Image";
-        private static object Read(object source, string property) => source?.GetType().GetProperty(property)?.GetValue(source);
+        private string ViewerName => "MF Image";
         private static object SizeOf(FrameworkElement element) => element == null ? null : new {
             element.Name, Width = element.ActualWidth, Height = element.ActualHeight, element.Visibility, element.IsVisible,
             DesiredWidth = element.DesiredSize.Width, DesiredHeight = element.DesiredSize.Height,
@@ -168,6 +154,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
             Scaling = RenderOptions.GetBitmapScalingMode(element).ToString()
         };
         private void Capture() {
+            if (!attached || !IsRelevant) return;
             try {
                 var timer = System.Diagnostics.Stopwatch.StartNew();
                 var image = viewer.Image;
@@ -175,11 +162,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 var canvas = viewer.FindName("PART_Canvas") as Canvas;
                 var scroll = viewer.FindName("PART_ScrollViewer") as ScrollViewer;
                 var zoom = viewer.FindName("PART_ScaleTransform") as ScaleTransform;
-                var rendered = Read(viewer.DataContext, "RenderedImage");
-                var nativeSource = Read(rendered, "Image") as BitmapSource;
-                var raw = Read(rendered, "RawImageData") as IImageData;
                 var vm = viewer.DataContext as ManualFocuserDockableVM;
-                bool displayedInspector = vm?.HasDisplayInspectorTiles ?? (IsInspector && nativeSource != null && !ReferenceEquals(image, nativeSource));
+                bool displayedInspector = vm.HasDisplayInspectorTiles;
                 var overlay = viewer.ImageAreaContent as FocusRoiOverlay;
                 var surface = overlay?.FindName("PreviewSurface") as FrameworkElement;
                 var tileControl = overlay?.FindName("InspectorTiles") as ItemsControl;
@@ -189,38 +173,19 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     pixels.Where(p => p.Tile%3 != 2).Any(p => p.Max > 0);
                 bool badBounds = canvas != null && (Math.Abs(canvas.ActualWidth - image.Width) > 1 || Math.Abs(canvas.ActualHeight - image.Height) > 1);
                 bool missingContainers = vm?.HasDisplayInspectorTiles == true &&
-                    (tileImages.Length != 9 || tileImages.Any(tile => tile.Visibility != Visibility.Visible || tile.ActualWidth < 1 || tile.ActualHeight < 1));
+                    (tileImages.Length != 9 || tileImages.Any(tile => tile.Visibility != Visibility.Visible || tile.Opacity == 0 || tile.ActualWidth < 1 || tile.ActualHeight < 1));
                 bool anomaly = missingSource || badBounds || missingContainers;
                 int anomalyKind = (missingSource ? 1 : 0) | (badBounds ? 2 : 0) | (missingContainers ? 4 : 0);
-                BitmapSource screenshot = null, source = null;
-                double screenshotScale = 1;
+                BitmapSource source = null;
                 bool snapshotRequested = wantSnapshot || anomaly;
                 if ((wantSnapshot || anomaly) && (DateTime.UtcNow - lastSnapshot > TimeSpan.FromSeconds(3) || anomalyKind != 0 && anomalyKind != lastAnomalyKind)) {
-                    // This is a software WPF render, explicitly distinguished from
-                    // the on-screen GPU output in the trace. Save the bitmap too.
-                    if (displayedInspector) { source = image; if (!source.IsFrozen) { source = source.Clone(); source.Freeze(); } }
-                    if (viewer.ActualWidth > 1 && viewer.ActualHeight > 1) {
-                        double scale = screenshotScale = Math.Min(1, 1280 / Math.Max(viewer.ActualWidth, viewer.ActualHeight));
-                        var drawing = new DrawingVisual();
-                        using (var dc = drawing.RenderOpen()) dc.DrawRectangle(new VisualBrush(viewer) { AutoLayoutContent = false }, null, new Rect(0, 0, viewer.ActualWidth * scale, viewer.ActualHeight * scale));
-                        var shot = new RenderTargetBitmap(Math.Max(1, (int)(viewer.ActualWidth * scale)), Math.Max(1, (int)(viewer.ActualHeight * scale)), 96, 96, PixelFormats.Pbgra32);
-                        shot.Render(drawing); shot.Freeze(); screenshot = shot;
-                    }
+                    // Never capture the viewer or any ancestor/descendant visual.
+                    // Freeze a private copy only when the source is still mutable;
+                    // the background encoder must not touch the display's state.
+                    source = image;
+                    if (!source.IsFrozen) { source = source.CloneCurrentValue(); source.Freeze(); }
                     lastSnapshot = DateTime.UtcNow;
                 }
-                var painted = new List<PixelSample>();
-                if (screenshot != null && displayedInspector && canvas != null && scroll != null) {
-                    var origin = scroll.TransformToAncestor(viewer).Transform(new Point());
-                    var viewport = new Rect(origin, new Size(scroll.ViewportWidth, scroll.ViewportHeight));
-                    for (int i=0;i<9;i++) {
-                        var point = canvas.TransformToAncestor(viewer).Transform(new Point(image.Width*(i%3+.5)/3, image.Height*(i/3+.5)/3));
-                        if (viewport.Contains(point) && point.X*screenshotScale < screenshot.PixelWidth && point.Y*screenshotScale < screenshot.PixelHeight)
-                            painted.Add(ReadPixelSample(screenshot,i,(int)(point.X*screenshotScale),(int)(point.Y*screenshotScale)));
-                    }
-                }
-                bool missingPaint = painted.Count(p => p.Tile%3==2)==3 && painted.Where(p=>p.Tile%3==2).All(p=>p.Max==0) &&
-                    pixels.Where(p=>p.Tile%3==2).All(p=>p.Max>0);
-                if (missingPaint) { anomaly = true; anomalyKind |= 8; }
                 var clips = new List<object>();
                 for (DependencyObject node = surface ?? (DependencyObject)canvas; node != null && clips.Count < 12; node = VisualTreeHelper.GetParent(node))
                     if (node is FrameworkElement element) clips.Add(SizeOf(element));
@@ -229,28 +194,25 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                     Reasons = reasons.ToArray(), Module = typeof(FocusViewerDiagnostics).Assembly.ManifestModule.ModuleVersionId,
                     PluginVersion = typeof(FocusViewerDiagnostics).Assembly.GetName().Version.ToString(), Process = Environment.ProcessId,
                     RenderTier = RenderCapability.Tier >> 16, Dpi = VisualTreeHelper.GetDpi(viewer).DpiScaleX,
-                    InspectorRequested = vm?.IsAberrationInspector ?? (Read(viewer.DataContext,"ShowAberration") is true), InspectorDisplayed = displayedInspector,
+                    InspectorRequested = vm.IsAberrationInspector, InspectorDisplayed = displayedInspector,
                     ImageId = RuntimeHelpers.GetHashCode(image), PixelWidth = image.PixelWidth, PixelHeight = image.PixelHeight, Format = image.Format.ToString(), image.IsFrozen,
                     ZoomX = zoom?.ScaleX, ZoomY = zoom?.ScaleY, Rotation = viewer.ImageRotation, Flip = viewer.ImageFlip,
                     Viewport = scroll == null ? null : new { scroll.ViewportWidth, scroll.ViewportHeight, scroll.ExtentWidth, scroll.ExtentHeight, scroll.HorizontalOffset, scroll.VerticalOffset },
                     Canvas = SizeOf(canvas), NativeImage = SizeOf(viewer.FindName("PART_Image") as FrameworkElement), Surface = SizeOf(surface), Clips = clips,
-                    NativeSource = nativeSource == null ? null : new { nativeSource.PixelWidth, nativeSource.PixelHeight, Format = nativeSource.Format.ToString(), Pixels = PixelGrid(nativeSource, false) },
-                    NativeRaw = raw == null ? null : new { raw.Properties.Width, raw.Properties.Height, raw.Properties.BitDepth, Count = raw.Data.FlatArray.Length },
                     FocusFrame = vm?.GetFocusViewerTrace(), Pixels = pixels,
                     TileContainers = tileImages.Select(tile => new { Bounds = SizeOf(tile), PixelWidth = (tile.Source as BitmapSource)?.PixelWidth,
                         PixelHeight = (tile.Source as BitmapSource)?.PixelHeight, SourceId = tile.Source == null ? 0 : RuntimeHelpers.GetHashCode(tile.Source),
                         CanvasPoint = canvas == null ? null : tile.TransformToAncestor(canvas).Transform(new Point()).ToString() }).ToArray(),
                     Generator = tileControl?.ItemContainerGenerator.Status.ToString(), MissingSourcePixels = missingSource,
                     BoundsMismatch = badBounds, MissingTileContainers = missingContainers, Anomaly = anomaly,
-                    SoftwarePaintedPixels = painted, MissingSoftwareRightColumn = missingPaint,
                     CaptureMilliseconds = timer.Elapsed.TotalMilliseconds,
-                    SnapshotKind = screenshot == null ? null : "software-wpf-render; not GPU screen capture"
-                }, source, screenshot);
+                    SnapshotKind = source == null ? null : "source-bitmap; not screen capture"
+                }, source);
                 lastAnomalyKind = anomalyKind;
-                reasons.Clear(); wantSnapshot = snapshotRequested && screenshot == null && source == null;
+                reasons.Clear(); wantSnapshot = snapshotRequested && source == null;
             } catch (Exception error) {
                 reasons.Clear(); wantSnapshot = false;
-                Enqueue(new { Utc = DateTime.UtcNow, Event = "capture-error", Viewer = ViewerName, Error = error.ToString() }, null, null);
+                Enqueue(new { Utc = DateTime.UtcNow, Event = "capture-error", Viewer = ViewerName, Error = error.ToString() }, null);
             }
         }
         private sealed record PixelSample(int Tile, int X, int Y, double Mean, int Min, int Max);
@@ -258,7 +220,6 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         private static PixelSample[] PixelGrid(BitmapSource bitmap, bool mosaic) {
             var result = new PixelSample[9];
             for (int row = 0; row < 3; row++) for (int col = 0; col < 3; col++) {
-                // Native mosaics have four-pixel gutters; MF uses eight.
                 int x = (int)(bitmap.PixelWidth * (col + .5) / 3), y = (int)(bitmap.PixelHeight * (row + .5) / 3);
                 result[row*3+col] = ReadPixelSample(bitmap,row*3+col,x,y);
             }
@@ -280,8 +241,8 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                 foreach (var nested in VisualChildren(child)) yield return nested;
             }
         }
-        private static void Enqueue(object state, BitmapSource source, BitmapSource screenshot) {
-            try { writes.Writer.TryWrite(new WriteJob(JsonSerializer.Serialize(state, jsonOptions), source, screenshot)); }
+        private static void Enqueue(object state, BitmapSource source) {
+            try { writes.Writer.TryWrite(new WriteJob(JsonSerializer.Serialize(state, jsonOptions), source)); }
             catch (Exception error) { Logger.Error("MF viewer trace serialization failed", error); }
         }
         private static async Task WriteLoop() {
@@ -308,11 +269,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
                         File.Move(path,Path.Combine(DirectoryPath,"viewer.1.jsonl"),true);
                     }
                     string prefix = null;
-                    if (job.SoftwareView != null || job.Source != null) {
+                    if (job.Source != null) {
                         prefix = "snapshot-" + (++snapshot % 12).ToString("D2");
-                        File.WriteAllText(Path.Combine(DirectoryPath,prefix+".json"),job.Json);
                         SavePng(job.Source,Path.Combine(DirectoryPath,prefix+"-bitmap.png"));
-                        SavePng(job.SoftwareView,Path.Combine(DirectoryPath,prefix+"-software-view.png"));
+                        File.WriteAllText(Path.Combine(DirectoryPath,prefix+".json"),job.Json);
                     }
                     await File.AppendAllTextAsync(path,job.Json+Environment.NewLine);
                     if (prefix != null) await File.AppendAllTextAsync(path,JsonSerializer.Serialize(new { Utc=DateTime.UtcNow, Event="snapshot-files", Prefix=prefix })+Environment.NewLine);

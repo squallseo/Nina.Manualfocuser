@@ -10,6 +10,10 @@ namespace Cwseo.NINA.ManualFocuser.Dockables {
         public ManualFocuserDockableView() {
             InitializeComponent();
             ((FocusRoiOverlay)FocusImageView.ImageAreaContent).AttachViewer(FocusImageView);
+            FocusImageView.Loaded += (_, _) => FocusViewerDiagnostics.Observe(FocusImageView);
+            FocusImageView.DataContextChanged += (_, _) => {
+                if (FocusImageView.IsLoaded) FocusViewerDiagnostics.Observe(FocusImageView);
+            };
             DataContextChanged += (_,e) => {
                 if (e.OldValue is ManualFocuserDockableVM old) PropertyChangedEventManager.RemoveHandler(old,OnSessionChanged,string.Empty);
                 if (e.NewValue is ManualFocuserDockableVM current) PropertyChangedEventManager.AddHandler(current,OnSessionChanged,string.Empty);

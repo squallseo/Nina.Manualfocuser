@@ -193,9 +193,12 @@ internal static class FocusImageToolbarChecks {
 
     private static async Task VerifyViewerTrace(NINA.WPF.Base.View.ImageView native,FocusRoiOverlay overlay,Action<bool,string> check) {
         var trace=typeof(ManualFocuserDockableVM).Assembly.GetType("Cwseo.NINA.ManualFocuser.Dockables.FocusViewerDiagnostics");
+        // This bitmap/layout fixture has no Window or normal Loaded lifecycle.
+        // Real panel loading and native-viewer isolation are checked separately.
+        trace.GetMethod("Observe",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{native});
         var table=trace.GetField("observers",BindingFlags.Static|BindingFlags.NonPublic).GetValue(null);
         object[] args={native,null};
-        check((bool)table.GetType().GetMethod("TryGetValue").Invoke(table,args),"The actual MF Image viewer has an automatic diagnostic observer");
+        check((bool)table.GetType().GetMethod("TryGetValue").Invoke(table,args),"MF Image's detached bitmap/layout fixture can opt into diagnostics");
         var observer=args[1];
         var queue=trace.GetMethod("Queue",BindingFlags.Instance|BindingFlags.NonPublic);
         var capture=trace.GetMethod("Capture",BindingFlags.Instance|BindingFlags.NonPublic);
@@ -250,7 +253,7 @@ internal static class FocusImageToolbarChecks {
             foreach(var image in rightImages)image.Opacity=0;
             native.UpdateLayout();
             trace.GetField("lastSnapshot",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(observer,DateTime.MinValue);
-            await VerifyLogged("test-injected-unpainted-right-column","MissingSoftwareRightColumn");
+            await VerifyLogged("test-injected-transparent-right-column","MissingTileContainers");
         } finally {foreach(var image in rightImages)image.Opacity=1;native.UpdateLayout();}
     }
 }
