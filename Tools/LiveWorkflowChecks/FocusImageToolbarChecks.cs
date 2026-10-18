@@ -24,10 +24,12 @@ internal static class FocusImageToolbarChecks {
         var native = ((Grid)view.FindName("PreviewCard")).Children.OfType<NINA.WPF.Base.View.ImageView>().Single();
         var overlay = (FocusRoiOverlay)native.ImageAreaContent;
         var tools = ((StackPanel)native.ButtonHeaderContent).Children.OfType<FrameworkElement>().ToArray();
-        check(tools.Length==7 && tools.OfType<ToggleButton>().Count()==3,"MF Image places stretch adjustment and native-image sync after the four image tools");
-        var stretchControls=(Grid)tools[4];
-        var stretch=stretchControls.Children.OfType<Slider>().Single();
-        var reset=stretchControls.Children.OfType<Button>().Single();
+        check(tools.Length==7 && tools.OfType<ToggleButton>().Count()==3 && tools[4] is FocusLevelsView && !tools.OfType<Slider>().Any(),"MF Image keeps only Auto Stretch and Levels, without duplicate toolbar brightness/reset controls");
+        var levelsView=(FocusLevelsView)tools[4];
+        var levelsPopup=((Grid)levelsView.Content).Children.OfType<Popup>().Single();
+        var levelsPanel=(StackPanel)((Border)levelsPopup.Child).Child;
+        var stretch=(FocusLevelsTrack)levelsView.FindName("LevelsTrack");
+        var reset=levelsPanel.Children.OfType<Button>().Single();
         check(ReferenceEquals(((Button)tools[0]).Template,((Style)view.FindResource("StandardButton")).Setters.OfType<Setter>().Single(s=>s.Property==Control.TemplateProperty).Value),
             "Image tools reuse the original NINA button template");
         check(ReferenceEquals(native.Image,vm.LiveDisplayBitmap) && ((Button)tools[6]).Command==vm.SyncImageCommand,
@@ -52,7 +54,7 @@ internal static class FocusImageToolbarChecks {
         ((ToggleButton)tools[3]).SetCurrentValue(ToggleButton.IsCheckedProperty,false);
         await Task.Delay(250);
         check(!vm.PreviewAutoStretch && !ReferenceEquals(vm.FocusPreviewImage,mosaic) && vm.LiveHfr==hfr,"Auto stretch can be disabled on the cached image without another measurement");
-        check(!stretch.IsEnabled && !reset.IsEnabled,"Disabling Auto Stretch disables its strength slider and reset together");
+        check(!stretch.IsEnabled && reset.IsEnabled && levelsView.IsEnabled,"Linear display disables manual adjustments but keeps the histogram and Auto action available");
         ((ToggleButton)tools[2]).SetCurrentValue(ToggleButton.IsCheckedProperty,false);
         await Task.Delay(250);
         var raw=typeof(ManualFocuserDockableVM).GetField("syncSourceImage",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(vm) switch {
@@ -66,13 +68,48 @@ internal static class FocusImageToolbarChecks {
         await Task.Delay(250);
         check(native.ImageRotation==0 && native.ImageFlip==1 && vm.PreviewAutoStretch,"Four quarter turns and flip reset restore the normal image presentation");
         var displayed=vm.LiveDisplayBitmap;
-        stretch.SetCurrentValue(Slider.ValueProperty,.5);
+        stretch.MoveHandle(FocusLevelHandle.Midtone,.3);
         await Task.Delay(250);
-        check(stretch.IsEnabled && reset.IsEnabled && vm.PreviewStretchStrength==.5 && !ReferenceEquals(displayed,vm.LiveDisplayBitmap) && vm.LiveHfr==hfr,
-            "Image toolbar strength changes rerender the cached pixels without recalculating HFR");
+        check(stretch.IsEnabled && reset.IsEnabled && vm.PreviewInputMidtone==.3 && !ReferenceEquals(displayed,vm.LiveDisplayBitmap) && vm.LiveHfr==hfr,
+            "Shared midtone handle rerenders cached pixels without recalculating HFR");
         reset.Command.Execute(null);
         await Task.Delay(250);
-        check(stretch.Value==1 && vm.PreviewStretchStrength==1,"The image toolbar reset restores shared stretch strength");
+        check(stretch.Midtone==.5 && vm.PreviewStretchStrength==1,"Auto restores neutral manual midtones and automatic stretch strength");
+        check(((Canvas)stretch.FindName("Handles")).Children.OfType<Thumb>().Count()==3 && levelsPanel.Width==340,"Levels places three focusable handles on one shared histogram axis");
+        // Popup has its own visual root; its explicit target binding must carry
+        // the session even while the popup is closed.
+        check(ReferenceEquals(((FrameworkElement)levelsPopup.Child).DataContext,vm),"Levels popup inherits the shared session through its placement target");
+        stretch.Measure(new Size(340,30)); stretch.Arrange(new Rect(0,0,340,30)); stretch.UpdateLayout();
+        var middleHandle=(Thumb)stretch.FindName("MidtoneHandle");
+        double HandlePosition()=>Canvas.GetLeft(middleHandle)/(stretch.ActualWidth-16);
+        stretch.MoveHandle(FocusLevelHandle.Black,.1);
+        check(Math.Abs(HandlePosition()-.55)<1e-10 && vm.PreviewInputMidtone==.5,"Moving black to 0.1 moves the neutral middle handle to 0.55 while preserving its relative value");
+        stretch.MoveHandle(FocusLevelHandle.White,.8);
+        check(Math.Abs(HandlePosition()-.45)<1e-10 && vm.PreviewInputMidtone==.5,"Moving white to 0.8 moves the neutral middle handle to the new interval center 0.45");
+        stretch.MoveHandle(FocusLevelHandle.Midtone,.275);
+        stretch.MoveHandle(FocusLevelHandle.White,.6);
+        check(Math.Abs(HandlePosition()-.225)<1e-10 && Math.Abs(vm.PreviewInputMidtone-.25)<1e-10,"An adjusted middle handle follows endpoint movement at its selected one-quarter ratio rather than snapping to the center");
+        stretch.MoveHandle(FocusLevelHandle.White,.8);
+        await Task.Delay(250);
+        check(vm.PreviewInputBlack==.1 && vm.PreviewInputWhite==.8 && vm.LiveHfr==hfr && !ReferenceEquals(displayed,vm.LiveDisplayBitmap),"Black and white handles rerender the same frame without HFR or equipment calls");
+        stretch.MoveHandle(FocusLevelHandle.Black,1);
+        check(vm.PreviewInputBlack<vm.PreviewInputWhite && stretch.BlackPoint<stretch.WhitePoint,"Black handle cannot cross the white handle and binding stays synchronized");
+        reset.Command.Execute(null); await Task.Delay(250);
+        stretch.MoveHandle(FocusLevelHandle.White,0);
+        check(vm.PreviewInputWhite>vm.PreviewInputBlack && stretch.WhitePoint>stretch.BlackPoint,"White handle cannot cross black, even at the track boundary");
+        reset.Command.Execute(null);await Task.Delay(250);
+        check(vm.PreviewBlackClipping==-2.8 && vm.PreviewWhitePoint==100 && vm.PreviewStretchStrength==1 && stretch.BlackPoint==0 && stretch.Midtone==.5 && stretch.WhitePoint==1,"Auto restores NINA settings and neutral black/midtone/white handles together");
+        stretch.MoveHandle(FocusLevelHandle.Midtone,.25); await Task.Delay(250);
+        var plot=await vm.GetPreviewHistogramAsync(default);
+        var displayPixels=new byte[vm.LiveDisplayBitmap.PixelWidth*vm.LiveDisplayBitmap.PixelHeight];
+        vm.LiveDisplayBitmap.CopyPixels(displayPixels,vm.LiveDisplayBitmap.PixelWidth,0);
+        var displayCounts=new long[256];foreach(byte value in displayPixels)displayCounts[value]++;
+        check(plot.PixelCount==displayPixels.Length && Enumerable.Range(0,256).All(i=>plot.DisplayAt(i)==displayCounts[i]),"Popup output histogram matches every displayed pixel rather than a downsampled screenshot");
+        vm.PreviewAutoStretch=false;await Task.Delay(250);
+        var linearPlot=await vm.GetPreviewHistogramAsync(default);
+        check(linearPlot.PixelCount==plot.PixelCount && !vm.PreviewAutoStretch && vm.LiveHfr==hfr,"Histogram remains available in linear mode without changing HFR or enabling stretch");
+        reset.Command.Execute(null);await Task.Delay(250);
+        check(vm.PreviewAutoStretch && stretch.IsEnabled,"Auto action enables stretch and its adjustments from linear mode");
         var type=typeof(ManualFocuserDockableVM);
         var widthField=type.GetField("previewRoiWidth",BindingFlags.Instance|BindingFlags.NonPublic);
         var heightField=type.GetField("previewRoiHeight",BindingFlags.Instance|BindingFlags.NonPublic);

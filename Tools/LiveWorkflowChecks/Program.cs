@@ -13,6 +13,11 @@ using NINA.PlateSolving.Interfaces;
 using NINA.Profile.Interfaces;
 
 int passed = 0;
+if(args.Contains("--histogram-checks")) { HistogramChecks.Run(Check); Console.WriteLine($"{passed} histogram checks passed."); return; }
+if(args.Contains("--histogram-files")) { await HistogramPerformance.Run(args[Array.IndexOf(args,"--histogram-files")+1]); return; }
+if(args.Contains("--levels-ui")) { ReadmeScreenshots.Run(args[Array.IndexOf(args,"--levels-ui")+1],"bin/levels-ui",true); return; }
+if(args.Contains("--stretch-files")) { await StretchComparison.Run(args[Array.IndexOf(args,"--stretch-files")+1]); return; }
+if(args.Contains("--stretch-checks")) { StretchLevelsChecks.Run(Check); Console.WriteLine($"{passed} stretch levels checks passed."); return; }
 if(args.Contains("--readme-screenshots")) {
     int index=Array.IndexOf(args,"--readme-screenshots");
     ReadmeScreenshots.Run(args[index+1],args[index+2]);return;

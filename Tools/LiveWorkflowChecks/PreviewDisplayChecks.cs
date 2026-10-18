@@ -40,7 +40,8 @@ internal static partial class PreviewDisplayChecks {
     private static async Task Verify(Action<bool,string> check) {
         Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory,"Database","Migration"));
         var telescopeSettings=Fake.Properties<ITelescopeSettings>(new(){["NoSync"]=true});
-        var profile=Fake.Of<IProfile>((n,b)=>n.Name=="get_TelescopeSettings"?telescopeSettings:Fake.Unexpected(n));
+        var imageSettings=Fake.Of<IImageSettings>((m,a)=>m.Name switch {"get_AutoStretchFactor"=>.2,"get_BlackClipping"=>-2.8,_=>Fake.Unexpected(m)});
+        var profile=Fake.Of<IProfile>((n,b)=>n.Name switch {"get_TelescopeSettings"=>telescopeSettings,"get_ImageSettings"=>imageSettings,_=>Fake.Unexpected(n)});
         var profiles=Fake.Of<IProfileService>((m,a)=>m.Name=="get_ActiveProfile"?profile:
             m.Name.StartsWith("add_")||m.Name.StartsWith("remove_")?null:Fake.Unexpected(m));
         var camera=Fake.Of<ICameraMediator>((m,a)=>m.Name switch {"GetInfo"=>new CameraInfo(),"IsFreeToCapture"=>true,"RegisterConsumer" or "RemoveConsumer"=>null,_=>Fake.Unexpected(m)});

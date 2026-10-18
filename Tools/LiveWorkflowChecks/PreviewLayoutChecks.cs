@@ -98,8 +98,8 @@ internal static partial class PreviewDisplayChecks {
             check(((SolidColorBrush)step.Foreground).Color.A==255,"Focuser button text uses the visible host theme at "+label);
             var exposure=Children(view).OfType<Slider>().Single(s=>s.Maximum==5000);
             check(exposure.ActualWidth>=30 && exposure.SmallChange==50,"Exposure slider fits with 50ms increments at "+label);
-            var stretch=Children(view).OfType<Slider>().Single(s=>s.Maximum==2.5);
-            check(stretch.ActualWidth>20 && stretch.Value==vm.PreviewStretchStrength,"Image stretch remains accessible at "+label);
+            var levels=Children(view).OfType<FocusLevelsView>().Single();
+            check(levels.ActualWidth>=64,"Image Levels popup remains accessible without a duplicate brightness slider at "+label);
             check(preview.ActualHeight>=height-272 && preview.ActualWidth>workspace.ActualWidth*.9 && graphs.Visibility==Visibility.Collapsed && metric.Visibility==Visibility.Visible,
                 "Folded layout maximizes the star image and retains HFR at "+label+$" (image {preview.ActualWidth:F0}x{preview.ActualHeight:F0}, workspace {workspace.ActualWidth:F0}, graphs {graphs.Visibility}, metric {metric.Visibility})");
             double fullHeight=preview.ActualHeight,fullWidth=preview.ActualWidth;

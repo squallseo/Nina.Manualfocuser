@@ -49,12 +49,13 @@ internal static partial class PreviewDisplayChecks
         var renderRaw=type.GetMethod("RenderRawFocusPreview",BindingFlags.Instance|BindingFlags.NonPublic);
         type.GetProperty(nameof(vm.FocusPreviewImage)).SetValue(vm,renderRaw.Invoke(vm,new object[]{source,null,null}));
         var roiBefore=vm.PreviewRoiRectangle;
+        string hfrStatusBefore=vm.LiveHfrText;
         vm.IsAberrationInspector=true;
         check(vm.IsAberrationInspector && vm.PreviewRoiPreset=="512" && vm.PreviewRoiWidth==512 && vm.PreviewRoiHeight==512 &&
             vm.PreviewRoiRectangle==roiBefore && vm.PreviewCenterX==70 && vm.PreviewCenterY==30,
             "Inspector display leaves the capture ROI and anchor unchanged");
-        check(!vm.CanUseBahtinovOverlay && vm.LiveHfrText.StartsWith("Multi-star HFR"),
-            "Inspector keeps the multi-star HFR metric and disables its display-only Bahtinov overlay");
+        check(!vm.CanUseBahtinovOverlay && vm.LiveHfrText==hfrStatusBefore,
+            "Inspector preserves the HFR status and disables its display-only Bahtinov overlay");
         var render=type.GetMethod("RenderAberrationPreview",BindingFlags.Instance|BindingFlags.NonPublic);
         var preview=(ImageSource)render.Invoke(vm,new object[]{source,null});
         check(preview.IsFrozen && preview.Width==plan.Width && preview.Height==plan.Height && preview is BitmapSource bitmap && bitmap.Format==PixelFormats.Pbgra32,
@@ -62,6 +63,8 @@ internal static partial class PreviewDisplayChecks
         type.GetField("assistRunning",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(vm,true);
         type.GetProperty(nameof(vm.FocusPreviewImage)).SetValue(vm,preview);
         var published=(BitmapSource)vm.FocusPreviewImage;
+        var inspectorHistogram=await vm.GetPreviewHistogramAsync(default);
+        check(inspectorHistogram.PixelCount==9*plan.Size*plan.Size,"Inspector histogram uses the same nine scientific tiles and excludes black gutters");
         check(published.IsFrozen && published.PixelWidth==plan.Width && published.PixelHeight==plan.Height && published.Format==PixelFormats.Pbgra32 && ReferenceEquals(published,preview),
             "Private inspector shares its bitmap without extra overlay rasterization");
         check(output() == null, "Inspector never replaces the native captured image");

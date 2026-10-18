@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableView"
+<UserControl x:Class="Cwseo.NINA.ManualFocuser.Dockables.ManualFocuserDockableView"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:local="clr-namespace:Cwseo.NINA.ManualFocuser.Dockables" xmlns:wpfbase="clr-namespace:NINA.WPF.Base.View;assembly=NINA.WPF.Base"
  xmlns:wpfutil="clr-namespace:NINA.WPF.Base.Utility;assembly=NINA.WPF.Base" Foreground="{DynamicResource PrimaryBrush}">
@@ -41,14 +41,7 @@
       <ToggleButton IsChecked="{Binding PreviewAutoStretch, Mode=TwoWay}" Style="{StaticResource ImageToolToggle}" ToolTip="Automatic stretch for MF display" AutomationProperties.Name="Auto stretch">
        <Path Margin="5" Data="{StaticResource WandSVG}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Stretch="Uniform" UseLayoutRounding="True"/>
       </ToggleButton>
-      <Grid IsEnabled="{Binding PreviewAutoStretch}" Margin="4,0,0,0" ToolTip="Display stretch: left is darker, right is brighter. Raw focus measurements are unchanged.">
-       <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
-       <Slider Minimum="0.25" Maximum="2.5" Value="{Binding PreviewStretchStrength, Mode=TwoWay}" SmallChange="0.05" LargeChange="0.25" TickFrequency="0.05" IsSnapToTickEnabled="True" IsMoveToPointEnabled="True" VerticalAlignment="Center" AutomationProperties.Name="Preview stretch strength"/>
-       <TextBlock Grid.Column="1" Text="{Binding PreviewStretchText}" Width="39" FontSize="11" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0"/>
-       <Button Grid.Column="2" Command="{Binding ResetPreviewStretchCommand}" Margin="2.5" ToolTip="Reset automatic stretch to 1.00×" AutomationProperties.Name="Reset preview stretch">
-        <Path Margin="7" Data="{StaticResource RefreshSVG}" Fill="{StaticResource ButtonForegroundBrush}" Stretch="Uniform" UseLayoutRounding="True"/>
-       </Button>
-      </Grid>
+      <local:FocusLevelsView/>
       <Separator Width="1" Margin="6,7" Background="{StaticResource BorderBrush}"/>
       <Button Command="{Binding SyncImageCommand}" Width="95" Margin="2.5" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Sync source to NINA Image">
        <Button.ToolTip>

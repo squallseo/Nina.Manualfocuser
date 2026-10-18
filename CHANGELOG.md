@@ -1,4 +1,9 @@
 # Manual Focuser
+## Unreleased
+- Improve Auto Stretch using NINA-style median/MAD and midtone transfer, with exact parallel histograms, cached frame estimates and a 16-bit LUT.
+- Add a compact Levels popup with three black/midtone/white handles on one histogram track, keyboard fine adjustment and Auto reset using the active NINA stretch settings.
+- Add input/display histograms, logarithmic view and clipping percentages; reuse stretch statistics and refresh only while the popup is open.
+
 ## 1.2.0.1 (2026-10-18)
 - Fix image preview freezes caused by diagnostic snapshots of live WPF viewers (issue #2).
 - Observe only MF Image, remove global host-viewer and keyboard hooks, and save source bitmaps without rendering viewer controls.

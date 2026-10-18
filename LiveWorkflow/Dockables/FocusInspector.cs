@@ -29,7 +29,9 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 ? new FocusRawFrame(image.Data.FlatArray,image.Properties.Width,0,0,image.Properties.Width,image.Properties.Height,image)
                 : source;
             var layout = FocusAberrationMosaic.Plan(inspection.Width, inspection.Height);
-            var bytes = FocusAberrationMosaic.Display(inspection, layout, level, autoStretch);
+            var levels = CurrentPreviewLevels;
+            FocusHistogram histogram = null;
+            var bytes = FocusAberrationMosaic.Display(inspection, layout, level, autoStretch, levels, h => histogram = h);
             // Materialize an opaque, compositor-ready bitmap on the worker. Avoid
             // deferring Gray8 texture conversion to the host's large VisualBrush.
             var displayPixels = new int[bytes.Length];
@@ -51,7 +53,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             }
             // Keep the original ushort source for stretch changes, but publish
             // mosaic dimensions so the host never rasterizes a full sensor bitmap.
-            previewPixels.Add(bitmap, new PreviewPixels(null, layout.Width, layout.Height, null, level, bitmap, source, Inspector: true, AutoStretch: autoStretch, Tiles: tiles) { StarAnnotation = CreateStarAnnotation(source) });
+            previewPixels.Add(bitmap, new PreviewPixels(null, layout.Width, layout.Height, null, level, bitmap, source, Inspector: true, AutoStretch: autoStretch, Tiles: tiles) { StarAnnotation = CreateStarAnnotation(source), Levels = levels, Histogram = histogram });
             return bitmap;
         }
     }

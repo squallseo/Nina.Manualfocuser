@@ -52,11 +52,11 @@ namespace Cwseo.NINA.ManualFocuser.LiveWorkflow.Models
             return new FocusRawFrame(pixels, width, 0, 0, width, width, source.SourceImage);
         }
 
-        public static byte[] Display(FocusRawFrame source, Layout layout, double strength = 1, bool autoStretch = true)
+        public static byte[] Display(FocusRawFrame source, Layout layout, double strength = 1, bool autoStretch = true, FocusStretchLevels? levels = null, Action<FocusHistogram> histogram = null)
         {
             // Stretch all nine scientific crops together. Gutters do
             // not bias background/noise estimation, and tiles keep one pixel scale.
-            var bytes = FocusDisplayStretch.RenderRaw(Extract(source, layout), strength, autoStretch);
+            var bytes = FocusDisplayStretch.RenderRaw(Extract(source, layout), strength, autoStretch, levels, histogram);
             var output = new byte[checked(layout.Width * layout.Height)];
             int size = layout.Size, width = size * 3;
             for (int i = 0; i < layout.Tiles.Length; i++)

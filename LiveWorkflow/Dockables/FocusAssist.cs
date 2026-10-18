@@ -73,7 +73,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 RaisePropertyChanged(nameof(LiveDisplayInspectorTiles)); RaisePropertyChanged(nameof(HasDisplayInspectorTiles));
                 RefreshStarBoxes();
                 SetSyncSource(raw?.Raw?.SourceImage);
-                if (raw != null && (raw.Strength != PreviewStretchStrength || raw.AutoStretch != PreviewAutoStretch || raw.Inspector != IsAberrationInspector))
+                if (raw != null && (raw.Strength != PreviewStretchStrength || raw.AutoStretch != PreviewAutoStretch || raw.Inspector != IsAberrationInspector || raw.Levels != CurrentPreviewLevels))
                 {
                     stretchRefresh?.Cancel(); _ = RefreshPreviewStretchAsync();
                 }
@@ -88,7 +88,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         {
             liveHistory = new LiveHfrHistory(LiveHfrPoints);
             InitializeImageSync();
-            ResetPreviewStretchCommand = new RelayCommand(_ => PreviewStretchStrength = 1);
+            ResetPreviewStretchCommand = new RelayCommand(_ => ResetPreviewLevels());
             InitializeRoiSelection();
             StartFocusPreviewCommand = new AsyncCommand<int>(() => RunGuarded("Focus preview", RunFocusPreviewAsync), _ => CanStartAssist());
             SelectRoiCommand = new AsyncCommand<int>(() => RunGuarded("Select ROI", CaptureOverviewAsync), _ => CanStartAssist());
@@ -399,16 +399,21 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
         {
             double level = strength ?? PreviewStretchStrength;
             bool autoStretch = PreviewAutoStretch;
-            var bytes = FocusDisplayStretch.Render(pixels, level, autoStretch);
-            return CreateFocusPreview(bytes, width, height, measurement, level, pixels, null, autoStretch);
+            var levels = CurrentPreviewLevels;
+            FocusHistogram histogram = null;
+            var bytes = FocusDisplayStretch.Render(pixels, level, autoStretch, levels, h => histogram = h);
+            return CreateFocusPreview(bytes, width, height, measurement, level, pixels, null, autoStretch, levels, histogram);
         }
         private ImageSource RenderRawFocusPreview(FocusRawFrame frame, BahtinovMeasurement measurement, double? strength = null)
         {
             double level = strength ?? PreviewStretchStrength;
             bool autoStretch = PreviewAutoStretch;
-            return CreateFocusPreview(FocusDisplayStretch.RenderRaw(frame, level, autoStretch), frame.Width, frame.Height, measurement, level, null, frame, autoStretch);
+            var levels = CurrentPreviewLevels;
+            FocusHistogram histogram = null;
+            var bytes = FocusDisplayStretch.RenderRaw(frame, level, autoStretch, levels, h => histogram = h);
+            return CreateFocusPreview(bytes, frame.Width, frame.Height, measurement, level, null, frame, autoStretch, levels, histogram);
         }
-        private ImageSource CreateFocusPreview(byte[] bytes, int width, int height, BahtinovMeasurement measurement, double level, double[] pixels, FocusRawFrame raw, bool autoStretch)
+        private ImageSource CreateFocusPreview(byte[] bytes, int width, int height, BahtinovMeasurement measurement, double level, double[] pixels, FocusRawFrame raw, bool autoStretch, FocusStretchLevels levels, FocusHistogram histogram)
         {
             var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray8, null, bytes, width);
             bitmap.Freeze();
@@ -416,7 +421,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
             {
                 // Normal video uses this same bitmap in the chosen viewer: no
                 // DrawingImage wrapper, second pixel buffer or extra rasterization.
-                previewPixels.Add(bitmap, new PreviewPixels(pixels, width, height, measurement, level, bitmap, raw, AutoStretch: autoStretch) { StarAnnotation = CreateStarAnnotation(raw) });
+                previewPixels.Add(bitmap, new PreviewPixels(pixels, width, height, measurement, level, bitmap, raw, AutoStretch: autoStretch) { StarAnnotation = CreateStarAnnotation(raw), Levels = levels, Histogram = histogram });
                 return bitmap;
             }
             var group = new DrawingGroup();
@@ -436,7 +441,7 @@ namespace Cwseo.NINA.ManualFocuser.Dockables
                 }
             }
             var result = new DrawingImage(group); result.Freeze();
-            previewPixels.Add(result, new PreviewPixels(pixels, width, height, measurement, level, bitmap, raw, AutoStretch: autoStretch) { StarAnnotation = CreateStarAnnotation(raw) });
+            previewPixels.Add(result, new PreviewPixels(pixels, width, height, measurement, level, bitmap, raw, AutoStretch: autoStretch) { StarAnnotation = CreateStarAnnotation(raw), Levels = levels, Histogram = histogram });
             return result;
         }
     }

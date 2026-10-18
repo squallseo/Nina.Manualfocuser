@@ -124,17 +124,17 @@ internal static partial class PreviewDisplayChecks
         history.ImageHistoryLeftSelected = ImageHistoryEnum.Median; await Layout();
         check(((LineSeries)originalSeries[0]).DataFieldY == "Median" && live.DataFieldY == "Y",
             "Native statistic preferences remain live bindings without changing the ROI trace");
-        // The compact stretch slider keeps its colors while keyboard-adjusted.
+        // The compact shared level track keeps one neutral gradient surface.
         var controls = new ManualFocuserDockableView {DataContext=vm,Width=350,Height=180};root.Children.Add(controls);await Layout();
-        var slider=Visuals(controls).OfType<Slider>().Single(s=>s.Maximum==2.5);slider.ApplyTemplate();
-        var background=(Grid)slider.Template.FindName("SliderSurface",slider);
-        var track=Visuals(slider).OfType<System.Windows.Controls.Primitives.Track>().Single();
-        var decrease=track.DecreaseRepeatButton.Background;var increase=track.IncreaseRepeatButton.Background;
-        slider.Focus();System.Windows.Input.Keyboard.Focus(slider);Slider.IncreaseSmall.Execute(null,slider);await Layout();
-        check(background.Background is SolidColorBrush brush && brush.Color.A==0 && ReferenceEquals(track.DecreaseRepeatButton.Background,decrease) && ReferenceEquals(track.IncreaseRepeatButton.Background,increase),
-            "Focused stretch adjustment keeps the scale-bar surface and track colors unchanged");
+        var levels=Visuals(controls).OfType<FocusLevelsView>().Single();
+        var track=(FocusLevelsTrack)levels.FindName("LevelsTrack");
+        var trackSurface=(Grid)track.Content;
+        var gradient=((Border)trackSurface.Children[0]).Background;
+        track.MoveHandle(FocusLevelHandle.Midtone,.4);await Layout();
+        check(ReferenceEquals(((Border)trackSurface.Children[0]).Background,gradient),
+            "Focused level adjustment keeps the shared gradient track unchanged");
         vm.ResetPreviewStretchCommand.Execute(null);await Layout();
-        check(background.Background is SolidColorBrush reset && reset.Color.A==0, "Reset keeps the same transparent slider surface");
+        check(track.Midtone==.5 && ReferenceEquals(((Border)trackSurface.Children[0]).Background,gradient), "Auto reset keeps the same gradient surface");
         root.Children.Remove(controls);
         typeof(ManualFocuserDockableVM).GetProperty(nameof(vm.IsSelectingRoi)).SetValue(vm,true);
         check(plot.Series.SequenceEqual(originalSeries) && plot.Axes.SequenceEqual(originalAxes), "ROI editing restores native captured-image axes and series");

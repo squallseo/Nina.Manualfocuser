@@ -24,12 +24,12 @@ using NINA.WPF.Base.Interfaces.Mediator;
 // Render the shipping WPF views with user-supplied FITS files. No equipment
 // commands run and no synthetic pixels or graph measurements are introduced.
 internal static class ReadmeScreenshots {
-    public static void Run(string folder, string output) {
+    public static void Run(string folder, string output, bool interactive = false) {
         Exception failure=null;
         var thread=new Thread(()=> {
             _=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
             Dispatcher.CurrentDispatcher.BeginInvoke(async()=> {
-                try {await Render(folder,output);}catch(Exception error){failure=error;}
+                try {await Render(folder,output,interactive);}catch(Exception error){failure=error;}
                 finally{Dispatcher.CurrentDispatcher.InvokeShutdown();}
             });
             Dispatcher.Run();
@@ -40,7 +40,7 @@ internal static class ReadmeScreenshots {
     private static object Default(MethodInfo method)=>method.ReturnType!=typeof(void)&&method.ReturnType.IsValueType?Activator.CreateInstance(method.ReturnType):null;
     private static T Equipment<T>(Func<MethodInfo,object[],object> callback=null) where T:class =>
         Fake.Of<T>((m,a)=>callback?.Invoke(m,a)??Default(m));
-    private static async Task Render(string folder,string output) {
+    private static async Task Render(string folder,string output,bool interactive) {
         Directory.CreateDirectory(output);
         Application.Current.Resources["ProfileService"]=new{ActiveProfile=new{ColorSchemaSettings=new{ColorSchema=new{
             PrimaryColor=Colors.White,SecondaryColor=Color.FromRgb(85,145,215),
@@ -78,12 +78,12 @@ internal static class ReadmeScreenshots {
         var analyzer=new NinaMultiStarHfr(profiles,factory,detectors,camera);
         var records=new List<(DateTime Time,int Position,double Hfr,int Stars)>();
         IImageData selected=null;
-        foreach(string file in Directory.GetFiles(folder,"*.fits").OrderBy(File.GetLastWriteTimeUtc)) {
+        foreach(string file in Directory.GetFiles(folder,"*.fits").OrderBy(File.GetLastWriteTimeUtc).Take(interactive ? 1 : int.MaxValue)) {
             var data=await NINA.Image.FileFormat.FITS.FITS.Load(new Uri(file),false,factory,default);
             const int crop=1024;
             var raw=new FocusRawFrame(data.Data.FlatArray,data.Properties.Width,(data.Properties.Width-crop)/2,
                 (data.Properties.Height-crop)/2,crop,crop,data);
-            var hfr=await analyzer.AnalyzeAsync(raw,default);
+            var hfr=interactive ? FocusHfrMeasurement.Empty : await analyzer.AnalyzeAsync(raw,default);
             if(data.MetaData.Focuser.Position.HasValue)
                 records.Add((data.MetaData.Image.ExposureStart==DateTime.MinValue?File.GetLastWriteTimeUtc(file):data.MetaData.Image.ExposureStart,
                     data.MetaData.Focuser.Position.Value,hfr.Hfr,hfr.Stars));
@@ -94,12 +94,19 @@ internal static class ReadmeScreenshots {
         motorInfo.Position=selected.MetaData.Focuser.Position??0;
         vm.UpdateDeviceInfo(cameraInfo);vm.UpdateDeviceInfo(motorInfo);
         vm.PreviewExposureMs=selected.MetaData.Image.ExposureTime*1000;
-        await vm.EnsureFocusTargetsLoadedAsync();
+        if(!interactive) await vm.EnsureFocusTargetsLoadedAsync();
         var source=new FocusRawFrame(selected.Data.FlatArray,selected.Properties.Width,0,0,selected.Properties.Width,selected.Properties.Height,selected);
         var render=typeof(ManualFocuserDockableVM).GetMethod("RenderRawFocusPreview",BindingFlags.Instance|BindingFlags.NonPublic);
         var imageProperty=typeof(ManualFocuserDockableVM).GetProperty(nameof(vm.FocusPreviewImage));
         imageProperty.SetValue(vm,await Task.Run(()=>render.Invoke(vm,new object[]{source,null,null})));
         var imageView=new ManualFocuserDockableView{DataContext=vm};
+        if(interactive) {
+            var closed=new TaskCompletionSource();
+            var window=new Window {Title="MF Levels Preview - isolated FITS harness",Width=1350,Height=850,
+                Background=(Brush)Application.Current.Resources["BackgroundBrush"],Content=imageView};
+            window.Closed+=(_,_)=>closed.TrySetResult();window.Show();
+            await closed.Task;return;
+        }
         var controlView=new FocusControlsView{DataContext=vm};
         ((Expander)controlView.FindName("SetupExpander")).IsExpanded=true;
         var historyView=new FocusHistoryPanelView{DataContext=new FocusHistoryDockableVM(profiles,vm)};
